@@ -238,108 +238,101 @@ export default function ProcessFlowChartArea({ configurationId }: ProcessFlowCha
         return a.order_index - b.order_index;
       });
 
-      // 计算建议总人数和瓶颈工序
+      // IE工程核心算法：线平衡优化
+      // 目标：最小化工位间方差，严格保证工序顺序
+
       const maxProcess = sequences.reduce((max, seq) =>
         seq.work_hours > max.work_hours ? seq : max
       , sequences[0]);
       const bottleneckSeconds = maxProcess.work_hours * 3600;
 
-      // 暂时假设每个工序建议1人，后续可以从数据库读取
-      const suggestedStationCount = sequences.length;
-
-      // 确保至少有1个工位
-      const initialStationCount = Math.max(1, suggestedStationCount);
-
-      // 贪心算法：按建议人数分配工位，最小化方差
-      // 策略：瓶颈工序单独，其他工序优先填充到最空闲的工位
-      const stations: WorkStation[] = [];
-
-      // 初始化工位数组（按建议人数）
-      for (let i = 0; i < initialStationCount; i++) {
-        stations.push({
-          id: i + 1,
-          processes: [],
-          totalHours: 0
-        });
+      // 计算方差的辅助函数
+      function calculateVariance(workloads: number[]): number {
+        if (workloads.length === 0) return Infinity;
+        const mean = workloads.reduce((sum, w) => sum + w, 0) / workloads.length;
+        return workloads.reduce((sum, w) => sum + Math.pow(w - mean, 2), 0) / workloads.length;
       }
 
-      // 第一遍：按顺序分配工序到工位
-      let currentStationIdx = 0;
-      for (let i = 0; i < sortedSequences.length; i++) {
-        const seq = sortedSequences[i];
-        const seqSeconds = seq.work_hours * 3600;
+      // 动态规划 + 贪心：严格按工序顺序分配工位
+      const stations: WorkStation[] = [];
 
-        // 瓶颈工序：找一个空工位单独放置
-        if (seq.id === maxProcess.id) {
-          // 找到第一个空工位
-          let emptyStationIdx = stations.findIndex(s => s.processes.length === 0);
-          if (emptyStationIdx === -1) {
-            // 没有空工位，创建新工位
+      // 初始化第一个工位
+      stations.push({
+        id: 1,
+        processes: [],
+        totalHours: 0
+      });
+
+      // 按排序后的顺序逐个处理工序
+      for (const seq of sortedSequences) {
+        const seqSeconds = seq.work_hours * 3600;
+        const currentStation = stations[stations.length - 1];
+        const currentSeconds = currentStation.totalHours * 3600;
+
+        // 决策：加入当前工位 OR 开启新工位
+        // 策略：计算两种方案的方差，选择方差更小的
+
+        // 方案A：加入当前工位（如果不超过瓶颈）
+        const canAddToCurrent = currentSeconds + seqSeconds <= bottleneckSeconds;
+
+        if (canAddToCurrent) {
+          // 计算加入当前工位后的方差
+          const workloadsA = stations.map((s, idx) =>
+            idx === stations.length - 1
+              ? (s.totalHours * 3600 + seqSeconds)
+              : s.totalHours * 3600
+          );
+          const varianceA = calculateVariance(workloadsA);
+
+          // 方案B：开启新工位
+          const workloadsB = [...stations.map(s => s.totalHours * 3600), seqSeconds];
+          const varianceB = calculateVariance(workloadsB);
+
+          // 特殊处理：如果是瓶颈工序，优先单独工位
+          const isBottleneck = seq.id === maxProcess.id;
+
+          // 选择方差更小的方案（或瓶颈工序强制新工位）
+          if (isBottleneck || varianceB <= varianceA) {
+            // 开启新工位
             stations.push({
               id: stations.length + 1,
               processes: [seq],
               totalHours: seq.work_hours
             });
           } else {
-            stations[emptyStationIdx].processes.push(seq);
-            stations[emptyStationIdx].totalHours += seq.work_hours;
+            // 加入当前工位
+            currentStation.processes.push(seq);
+            currentStation.totalHours += seq.work_hours;
           }
-          continue;
-        }
-
-        // 非瓶颈工序：尝试添加到当前工位，如果超出则找下一个工位
-        let placed = false;
-        const startIdx = currentStationIdx;
-
-        // 先尝试当前工位及后续工位
-        for (let attempts = 0; attempts < stations.length && !placed; attempts++) {
-          const stationSeconds = stations[currentStationIdx].totalHours * 3600;
-
-          // 检查是否可以放入当前工位（不超过瓶颈工时）
-          if (stationSeconds + seqSeconds <= bottleneckSeconds) {
-            stations[currentStationIdx].processes.push(seq);
-            stations[currentStationIdx].totalHours += seq.work_hours;
-            placed = true;
-            // 继续使用当前工位（尽量填满）
-          } else {
-            // 当前工位放不下，尝试下一个
-            currentStationIdx = (currentStationIdx + 1) % stations.length;
-          }
-        }
-
-        // 如果所有工位都放不下，创建新工位
-        if (!placed) {
+        } else {
+          // 当前工位已满，必须开启新工位
           stations.push({
             id: stations.length + 1,
             processes: [seq],
             totalHours: seq.work_hours
           });
-          // 如果工序超过瓶颈，这是正常的（它会成为新的瓶颈）
         }
       }
 
-      // 优化：移除空工位
-      const finalStations = stations.filter(s => s.processes.length > 0);
+      // 验证：确保工序顺序正确（不应该出现逆序）
+      for (let i = 0; i < stations.length - 1; i++) {
+        const maxLevelInCurrent = Math.max(...stations[i].processes.map(p => p.sequence_level));
+        const maxOrderInCurrent = Math.max(...stations[i].processes
+          .filter(p => p.sequence_level === maxLevelInCurrent)
+          .map(p => p.order_index));
 
-      if (finalStations.length === 0) {
-        throw new Error('无法生成工位分配方案');
+        const minLevelInNext = Math.min(...stations[i + 1].processes.map(p => p.sequence_level));
+        const minOrderInNext = Math.min(...stations[i + 1].processes
+          .filter(p => p.sequence_level === minLevelInNext)
+          .map(p => p.order_index));
+
+        if (maxLevelInCurrent > minLevelInNext ||
+            (maxLevelInCurrent === minLevelInNext && maxOrderInCurrent >= minOrderInNext)) {
+          console.error('工序顺序错误！工位', i + 1, '的最后工序在工位', i + 2, '的第一个工序之后');
+        }
       }
 
-      // 按工位内最小工序等级排序，确保顺序正确
-      finalStations.sort((a, b) => {
-        const minLevelA = Math.min(...a.processes.map(p => p.sequence_level));
-        const minLevelB = Math.min(...b.processes.map(p => p.sequence_level));
-        if (minLevelA !== minLevelB) return minLevelA - minLevelB;
-
-        const minOrderA = Math.min(...a.processes.map(p => p.order_index));
-        const minOrderB = Math.min(...b.processes.map(p => p.order_index));
-        return minOrderA - minOrderB;
-      });
-
-      // 重新分配工位ID
-      finalStations.forEach((station, index) => {
-        station.id = index + 1;
-      });
+      const finalStations = stations;
 
       const maxStationSeconds = Math.max(...finalStations.map(s => s.totalHours * 3600));
       const actualTaktTime = maxStationSeconds;
