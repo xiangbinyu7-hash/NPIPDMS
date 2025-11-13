@@ -244,7 +244,8 @@ export default function ProcessFlowChartArea({ configurationId }: ProcessFlowCha
       , sequences[0]);
       const bottleneckSeconds = maxProcess.work_hours * 3600;
 
-      const suggestedStationCount = sequences.reduce((sum, seq) => sum + (seq.suggested_people || 0), 0);
+      // 暂时假设每个工序建议1人，后续可以从数据库读取
+      const suggestedStationCount = sequences.length;
 
       // 确保至少有1个工位
       const initialStationCount = Math.max(1, suggestedStationCount);
@@ -326,8 +327,8 @@ export default function ProcessFlowChartArea({ configurationId }: ProcessFlowCha
 
       // 按工位内最小工序等级排序，确保顺序正确
       finalStations.sort((a, b) => {
-        const minLevelA = Math.min(...a.processes.map(p => parseInt(p.level.substring(1))));
-        const minLevelB = Math.min(...b.processes.map(p => parseInt(p.level.substring(1))));
+        const minLevelA = Math.min(...a.processes.map(p => p.sequence_level));
+        const minLevelB = Math.min(...b.processes.map(p => p.sequence_level));
         if (minLevelA !== minLevelB) return minLevelA - minLevelB;
 
         const minOrderA = Math.min(...a.processes.map(p => p.order_index));
