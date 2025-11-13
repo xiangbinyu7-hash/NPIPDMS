@@ -265,12 +265,19 @@ export default function ProcessFlowChartArea({ configurationId }: ProcessFlowCha
 
         let bestSolution: WorkStation[] = [];
         let bestVariance = Infinity;
+        let solutionCount = 0;
+
+        console.log(`\n===== 开始回溯搜索 (${n}个工序) =====`);
+        console.log('工序列表:', processes.map(p => `${p.process_name}(${(p.work_hours*3600).toFixed(0)}s)`).join(', '));
+        console.log('瓶颈约束:', bottleneckSeconds + 's');
 
         // 使用分割点表示方案：[0, 1, 0, 1, 0] 表示在位置1和3后分割
         // 递归生成所有合法的分割方案
         function backtrack(index: number, currentStations: WorkStation[]) {
           // 所有工序都已分配
           if (index === n) {
+            solutionCount++;
+
             // 检查所有工位是否满足瓶颈约束
             const allValid = currentStations.every(s => s.totalHours * 3600 <= bottleneckSeconds);
             if (!allValid) return;
@@ -281,6 +288,13 @@ export default function ProcessFlowChartArea({ configurationId }: ProcessFlowCha
 
             // 更新最优解
             if (variance < bestVariance) {
+              console.log(`\n找到更优解 #${solutionCount} (方差=${variance.toFixed(0)}):`);
+              currentStations.forEach((s, idx) => {
+                const processNames = s.processes.map(p => p.process_name).join('、');
+                const totalSec = s.totalHours * 3600;
+                console.log(`  工位${idx+1}: ${processNames} = ${totalSec.toFixed(0)}s`);
+              });
+
               bestVariance = variance;
               bestSolution = currentStations.map(s => ({
                 ...s,
@@ -324,6 +338,10 @@ export default function ProcessFlowChartArea({ configurationId }: ProcessFlowCha
         }
 
         backtrack(0, []);
+
+        console.log(`\n总共探索了 ${solutionCount} 种方案`);
+        console.log(`最优方差: ${bestVariance.toFixed(0)}`);
+        console.log('===== 回溯搜索完成 =====\n');
 
         return bestSolution;
       }
