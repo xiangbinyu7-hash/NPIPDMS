@@ -238,7 +238,7 @@ export default function ProcessFlowChartArea({ configurationId }: ProcessFlowCha
         return a.order_index - b.order_index;
       });
 
-      // IE工程核心算法：线平衡优化
+      // IE工程核心算法：线平衡优化（动态规划+回溯搜索）
       // 目标：最小化工位间方差，严格保证工序顺序
 
       const maxProcess = sequences.reduce((max, seq) =>
@@ -253,76 +253,139 @@ export default function ProcessFlowChartArea({ configurationId }: ProcessFlowCha
         return workloads.reduce((sum, w) => sum + Math.pow(w - mean, 2), 0) / workloads.length;
       }
 
-      // 动态规划 + 贪心：严格按工序顺序分配工位
-      const stations: WorkStation[] = [];
+      // 计算标准差（更直观）
+      function calculateStdDev(workloads: number[]): number {
+        return Math.sqrt(calculateVariance(workloads));
+      }
 
-      // 初始化第一个工位
-      stations.push({
-        id: 1,
-        processes: [],
-        totalHours: 0
-      });
+      // 回溯搜索：枚举所有可能的分割方案，找全局最优
+      function findOptimalStations(processes: ProcessSequence[]): WorkStation[] {
+        const n = processes.length;
+        if (n === 0) return [];
 
-      // 按排序后的顺序逐个处理工序
-      for (const seq of sortedSequences) {
-        const seqSeconds = seq.work_hours * 3600;
-        const currentStation = stations[stations.length - 1];
-        const currentSeconds = currentStation.totalHours * 3600;
+        let bestSolution: WorkStation[] = [];
+        let bestVariance = Infinity;
 
-        // 决策：加入当前工位 OR 开启新工位
-        // 策略：计算两种方案的方差，选择方差更小的
+        // 使用分割点表示方案：[0, 1, 0, 1, 0] 表示在位置1和3后分割
+        // 递归生成所有合法的分割方案
+        function backtrack(index: number, currentStations: WorkStation[]) {
+          // 所有工序都已分配
+          if (index === n) {
+            // 检查所有工位是否满足瓶颈约束
+            const allValid = currentStations.every(s => s.totalHours * 3600 <= bottleneckSeconds);
+            if (!allValid) return;
 
-        // 方案A：加入当前工位（如果不超过瓶颈）
-        const canAddToCurrent = currentSeconds + seqSeconds <= bottleneckSeconds;
+            // 计算当前方案的方差
+            const workloads = currentStations.map(s => s.totalHours * 3600);
+            const variance = calculateVariance(workloads);
 
-        if (canAddToCurrent) {
-          // 计算加入当前工位后的方差
-          const workloadsA = stations.map((s, idx) =>
-            idx === stations.length - 1
-              ? (s.totalHours * 3600 + seqSeconds)
-              : s.totalHours * 3600
-          );
-          const varianceA = calculateVariance(workloadsA);
+            // 更新最优解
+            if (variance < bestVariance) {
+              bestVariance = variance;
+              bestSolution = currentStations.map(s => ({
+                ...s,
+                processes: [...s.processes]
+              }));
+            }
+            return;
+          }
 
-          // 方案B：开启新工位
-          const workloadsB = [...stations.map(s => s.totalHours * 3600), seqSeconds];
-          const varianceB = calculateVariance(workloadsB);
+          const currentProcess = processes[index];
+          const currentProcessSeconds = currentProcess.work_hours * 3600;
 
-          // 特殊处理：如果是瓶颈工序，优先单独工位
-          const isBottleneck = seq.id === maxProcess.id;
+          // 选择1：加入最后一个工位（如果存在且不超过瓶颈）
+          if (currentStations.length > 0) {
+            const lastStation = currentStations[currentStations.length - 1];
+            const newTotalSeconds = lastStation.totalHours * 3600 + currentProcessSeconds;
 
-          // 选择方差更小的方案（或瓶颈工序强制新工位）
-          if (isBottleneck || varianceB <= varianceA) {
-            // 开启新工位
+            if (newTotalSeconds <= bottleneckSeconds) {
+              lastStation.processes.push(currentProcess);
+              lastStation.totalHours += currentProcess.work_hours;
+
+              backtrack(index + 1, currentStations);
+
+              // 回溯
+              lastStation.processes.pop();
+              lastStation.totalHours -= currentProcess.work_hours;
+            }
+          }
+
+          // 选择2：开启新工位
+          currentStations.push({
+            id: currentStations.length + 1,
+            processes: [currentProcess],
+            totalHours: currentProcess.work_hours
+          });
+
+          backtrack(index + 1, currentStations);
+
+          // 回溯
+          currentStations.pop();
+        }
+
+        backtrack(0, []);
+
+        return bestSolution;
+      }
+
+      // 贪心算法（备用）
+      function greedyAlgorithm(processes: ProcessSequence[], maxSeconds: number): WorkStation[] {
+        const stations: WorkStation[] = [];
+
+        stations.push({
+          id: 1,
+          processes: [],
+          totalHours: 0
+        });
+
+        for (const seq of processes) {
+          const seqSeconds = seq.work_hours * 3600;
+          const currentStation = stations[stations.length - 1];
+          const currentSeconds = currentStation.totalHours * 3600;
+
+          if (currentSeconds + seqSeconds <= maxSeconds) {
+            currentStation.processes.push(seq);
+            currentStation.totalHours += seq.work_hours;
+          } else {
             stations.push({
               id: stations.length + 1,
               processes: [seq],
               totalHours: seq.work_hours
             });
-          } else {
-            // 加入当前工位
-            currentStation.processes.push(seq);
-            currentStation.totalHours += seq.work_hours;
           }
-        } else {
-          // 当前工位已满，必须开启新工位
-          stations.push({
-            id: stations.length + 1,
-            processes: [seq],
-            totalHours: seq.work_hours
-          });
         }
+
+        return stations;
       }
 
-      // 验证：确保工序顺序正确（不应该出现逆序）
-      for (let i = 0; i < stations.length - 1; i++) {
-        const maxLevelInCurrent = Math.max(...stations[i].processes.map(p => p.sequence_level));
-        const maxOrderInCurrent = Math.max(...stations[i].processes
+      // 执行优化
+      let finalStations: WorkStation[];
+
+      // 对于工序较少的情况（≤12），使用精确算法
+      if (sortedSequences.length <= 12) {
+        console.log('使用回溯搜索算法（精确解）');
+        finalStations = findOptimalStations(sortedSequences);
+
+        if (finalStations.length === 0) {
+          // 回退到贪心算法
+          console.warn('回溯算法未找到解，使用贪心算法');
+          finalStations = greedyAlgorithm(sortedSequences, bottleneckSeconds);
+        }
+      } else {
+        // 工序较多时，使用贪心算法
+        console.log('工序数量较多，使用贪心算法');
+        finalStations = greedyAlgorithm(sortedSequences, bottleneckSeconds);
+      }
+
+      // 验证：确保工序顺序正确
+      for (let i = 0; i < finalStations.length - 1; i++) {
+        const maxLevelInCurrent = Math.max(...finalStations[i].processes.map(p => p.sequence_level));
+        const maxOrderInCurrent = Math.max(...finalStations[i].processes
           .filter(p => p.sequence_level === maxLevelInCurrent)
           .map(p => p.order_index));
 
-        const minLevelInNext = Math.min(...stations[i + 1].processes.map(p => p.sequence_level));
-        const minOrderInNext = Math.min(...stations[i + 1].processes
+        const minLevelInNext = Math.min(...finalStations[i + 1].processes.map(p => p.sequence_level));
+        const minOrderInNext = Math.min(...finalStations[i + 1].processes
           .filter(p => p.sequence_level === minLevelInNext)
           .map(p => p.order_index));
 
@@ -332,7 +395,14 @@ export default function ProcessFlowChartArea({ configurationId }: ProcessFlowCha
         }
       }
 
-      const finalStations = stations;
+      // 输出优化结果
+      console.log('线平衡优化结果:');
+      finalStations.forEach(s => {
+        console.log(`工位${s.id}: ${s.processes.map(p => p.process_name).join('、')} = ${s.totalHours * 3600}s`);
+      });
+      const workloads = finalStations.map(s => s.totalHours * 3600);
+      console.log('方差:', calculateVariance(workloads).toFixed(2));
+      console.log('标准差:', calculateStdDev(workloads).toFixed(2) + 's');
 
       const maxStationSeconds = Math.max(...finalStations.map(s => s.totalHours * 3600));
       const actualTaktTime = maxStationSeconds;
