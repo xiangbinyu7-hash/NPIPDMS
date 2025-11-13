@@ -244,31 +244,17 @@ export default function ProcessFlowChartArea({ configurationId }: ProcessFlowCha
       , sequences[0]);
       const bottleneckSeconds = maxProcess.work_hours * 3600;
 
-      const suggestedStationCount = sequences.reduce((sum, seq) => sum + seq.suggested_people, 0);
+      const suggestedStationCount = sequences.reduce((sum, seq) => sum + (seq.suggested_people || 0), 0);
 
-      // 使用动态规划找到最优分配方案（最小化方差）
-      function calculateVariance(stations: WorkStation[]): number {
-        const times = stations.map(s => s.totalHours * 3600);
-        const mean = times.reduce((sum, t) => sum + t, 0) / times.length;
-        const variance = times.reduce((sum, t) => sum + Math.pow(t - mean, 2), 0) / times.length;
-        return variance;
-      }
+      // 确保至少有1个工位
+      const initialStationCount = Math.max(1, suggestedStationCount);
 
       // 贪心算法：按建议人数分配工位，最小化方差
       // 策略：瓶颈工序单独，其他工序优先填充到最空闲的工位
       const stations: WorkStation[] = [];
 
-      // 先为瓶颈工序创建工位
-      let bottleneckStationIndex = -1;
-      for (let i = 0; i < sortedSequences.length; i++) {
-        if (sortedSequences[i].id === maxProcess.id) {
-          bottleneckStationIndex = i;
-          break;
-        }
-      }
-
       // 初始化工位数组（按建议人数）
-      for (let i = 0; i < suggestedStationCount; i++) {
+      for (let i = 0; i < initialStationCount; i++) {
         stations.push({
           id: i + 1,
           processes: [],
@@ -302,6 +288,9 @@ export default function ProcessFlowChartArea({ configurationId }: ProcessFlowCha
 
         // 非瓶颈工序：尝试添加到当前工位，如果超出则找下一个工位
         let placed = false;
+        const startIdx = currentStationIdx;
+
+        // 先尝试当前工位及后续工位
         for (let attempts = 0; attempts < stations.length && !placed; attempts++) {
           const stationSeconds = stations[currentStationIdx].totalHours * 3600;
 
@@ -310,25 +299,30 @@ export default function ProcessFlowChartArea({ configurationId }: ProcessFlowCha
             stations[currentStationIdx].processes.push(seq);
             stations[currentStationIdx].totalHours += seq.work_hours;
             placed = true;
+            // 继续使用当前工位（尽量填满）
           } else {
             // 当前工位放不下，尝试下一个
             currentStationIdx = (currentStationIdx + 1) % stations.length;
           }
         }
 
-        // 如果所有工位都放不下（工序本身就超过瓶颈），单独创建工位
+        // 如果所有工位都放不下，创建新工位
         if (!placed) {
           stations.push({
             id: stations.length + 1,
             processes: [seq],
             totalHours: seq.work_hours
           });
-          currentStationIdx = stations.length - 1;
+          // 如果工序超过瓶颈，这是正常的（它会成为新的瓶颈）
         }
       }
 
       // 优化：移除空工位
       const finalStations = stations.filter(s => s.processes.length > 0);
+
+      if (finalStations.length === 0) {
+        throw new Error('无法生成工位分配方案');
+      }
 
       // 按工位内最小工序等级排序，确保顺序正确
       finalStations.sort((a, b) => {
@@ -397,7 +391,9 @@ export default function ProcessFlowChartArea({ configurationId }: ProcessFlowCha
       });
       alert('工艺流程图生成成功！');
     } catch (error) {
-      alert('生成失败');
+      console.error('生成流程图失败:', error);
+      const errorMessage = error instanceof Error ? error.message : '生成失败，请检查数据';
+      alert(errorMessage);
     } finally {
       setLoading(false);
     }
