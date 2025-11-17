@@ -251,11 +251,12 @@ export default function ProcessFlowChartArea({ configurationId }: ProcessFlowCha
         return a.order_index - b.order_index;
       });
 
-      // IE工程核心算法：线平衡优化（遵循四大逻辑）
+      // IE工程核心算法：线平衡优化（遵循五大逻辑）
       // 逻辑1: 严格遵循工序等级排序+工序层后顺序（原则）
       // 逻辑2: 工时最长的工序即为瓶颈工序，独立作为一个工位，不和其他工序共享工位
       // 逻辑3: 目标是平衡率最优，推算出最优人数
       // 逻辑4: 全员仅效，计算各方案工位门的的方差并选择最优小方差情况方案
+      // 逻辑5: 同一级别的工序，可以在同一个工位，并且互相允许调换
 
       // 找出瓶颈工序（工时最长的工序）
       const maxProcess = sequences.reduce((max, seq) =>
@@ -278,7 +279,7 @@ export default function ProcessFlowChartArea({ configurationId }: ProcessFlowCha
         return Math.sqrt(calculateVariance(workloads));
       }
 
-      // 完全枚举算法：遵循四大逻辑的线平衡优化
+      // 完全枚举算法：遵循五大逻辑的线平衡优化
       function findOptimalStations(processes: ProcessSequence[], bottleneckProcess: ProcessSequence): WorkStation[] {
         // 分离瓶颈工序和其他工序（逻辑2）
         const otherProcesses = processes.filter(p => p.id !== bottleneckProcess.id);
@@ -293,12 +294,55 @@ export default function ProcessFlowChartArea({ configurationId }: ProcessFlowCha
           }];
         }
 
-        let allSolutions: { stations: WorkStation[], variance: number, workloads: number[], stationCount: number, balanceRate: number }[] = [];
+        // 将工序按等级分组（逻辑5）
+        const levelGroups = new Map<number, ProcessSequence[]>();
+        otherProcesses.forEach(p => {
+          if (!levelGroups.has(p.sequence_level)) {
+            levelGroups.set(p.sequence_level, []);
+          }
+          levelGroups.get(p.sequence_level)!.push(p);
+        });
 
         console.log(`\n===== 开始智能线平衡优化 (${n}个非瓶颈工序 + 1个瓶颈工序) =====`);
         console.log('瓶颈工序:', `${bottleneckProcess.process_name}(${bottleneckProcess.work_seconds}s) - 独立工位`);
-        console.log('其他工序:', otherProcesses.map(p => `${p.process_name}(${p.work_seconds}s)`).join(', '));
-        console.log('节拍时间约束:', bottleneckSeconds + 's\n');
+        console.log('工序分组（按等级）:');
+        Array.from(levelGroups.entries()).sort((a, b) => a[0] - b[0]).forEach(([level, procs]) => {
+          console.log(`  等级${level}: ${procs.map(p => `${p.process_name}(${p.work_seconds}s)`).join(', ')}`);
+        });
+        console.log('节拍时间约束:', bottleneckSeconds + 's');
+        console.log('逻辑5: 同一等级工序可以互相调换顺序以优化平衡率\n');
+
+        let allSolutions: { stations: WorkStation[], variance: number, workloads: number[], stationCount: number, balanceRate: number }[] = [];
+
+        // 生成同级别工序的所有排列组合
+        function generatePermutations<T>(arr: T[]): T[][] {
+          if (arr.length <= 1) return [arr];
+          const result: T[][] = [];
+          for (let i = 0; i < arr.length; i++) {
+            const rest = [...arr.slice(0, i), ...arr.slice(i + 1)];
+            const perms = generatePermutations(rest);
+            for (const perm of perms) {
+              result.push([arr[i], ...perm]);
+            }
+          }
+          return result;
+        }
+
+        // 为每个等级生成所有可能的排列
+        const levelPermutations = new Map<number, ProcessSequence[][]>();
+        levelGroups.forEach((procs, level) => {
+          // 限制排列数量，避免组合爆炸（同一等级不超过6个工序才全排列）
+          if (procs.length <= 6) {
+            levelPermutations.set(level, generatePermutations(procs));
+          } else {
+            // 工序太多时只使用原始顺序
+            levelPermutations.set(level, [procs]);
+          }
+        });
+
+        const totalPermutations = Array.from(levelPermutations.values())
+          .reduce((acc, perms) => acc * perms.length, 1);
+        console.log(`同级别工序排列组合数: ${totalPermutations}\n`);
 
         // 验证工位等级顺序：确保后面的工位的最小等级 >= 前面工位的最大等级
         function validateLevelOrder(stations: WorkStation[]): boolean {
@@ -314,7 +358,7 @@ export default function ProcessFlowChartArea({ configurationId }: ProcessFlowCha
         }
 
         // 递归枚举：每个工序可以加入到任意已存在的工位，或开启新工位
-        function enumerate(index: number, currentStations: WorkStation[]) {
+        function enumerate(index: number, currentStations: WorkStation[], processOrder: ProcessSequence[]) {
           // 所有非瓶颈工序已分配完成
           if (index === n) {
             // 检查所有工位是否满足节拍时间约束
@@ -381,7 +425,7 @@ export default function ProcessFlowChartArea({ configurationId }: ProcessFlowCha
             return;
           }
 
-          const currentProcess = otherProcesses[index];
+          const currentProcess = processOrder[index];
           const currentProcessSeconds = currentProcess.work_seconds;
           const currentLevel = currentProcess.sequence_level;
 
@@ -410,7 +454,7 @@ export default function ProcessFlowChartArea({ configurationId }: ProcessFlowCha
                 station.processes.push(currentProcess);
                 station.totalSeconds += currentProcess.work_seconds;
 
-                enumerate(index + 1, currentStations);
+                enumerate(index + 1, currentStations, processOrder);
 
                 // 回溯
                 station.processes.pop();
@@ -426,14 +470,52 @@ export default function ProcessFlowChartArea({ configurationId }: ProcessFlowCha
             totalSeconds: currentProcess.work_seconds
           });
 
-          enumerate(index + 1, currentStations);
+          enumerate(index + 1, currentStations, processOrder);
 
           // 回溯
           currentStations.pop();
         }
 
-        // 开始枚举
-        enumerate(0, []);
+        // 生成所有可能的工序排列组合（逻辑5）
+        function generateAllProcessOrders(): ProcessSequence[][] {
+          const sortedLevels = Array.from(levelGroups.keys()).sort((a, b) => a - b);
+          const levelPermsArray: ProcessSequence[][][] = sortedLevels.map(level =>
+            levelPermutations.get(level)!
+          );
+
+          // 笛卡尔积：组合所有等级的排列
+          function cartesianProduct(arrays: ProcessSequence[][][]): ProcessSequence[][] {
+            if (arrays.length === 0) return [[]];
+            const [first, ...rest] = arrays;
+            const restProduct = cartesianProduct(rest);
+            const result: ProcessSequence[][] = [];
+            for (const firstItem of first) {
+              for (const restItem of restProduct) {
+                result.push([...firstItem, ...restItem]);
+              }
+            }
+            return result;
+          }
+
+          return cartesianProduct(levelPermsArray);
+        }
+
+        const allProcessOrders = generateAllProcessOrders();
+        console.log(`将尝试 ${allProcessOrders.length} 种工序排列组合\n`);
+
+        // 对每种排列组合进行枚举
+        for (let orderIdx = 0; orderIdx < allProcessOrders.length; orderIdx++) {
+          const processOrder = allProcessOrders[orderIdx];
+
+          // 限制总方案数，避免运行时间过长
+          if (allSolutions.length > 10000) {
+            console.log('已生成足够多的方案，停止枚举');
+            break;
+          }
+
+          // 开始枚举这个排列
+          enumerate(0, [], processOrder);
+        }
 
         console.log(`\n总共找到 ${allSolutions.length} 种有效方案\n`);
 
