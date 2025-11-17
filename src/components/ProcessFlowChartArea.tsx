@@ -41,7 +41,6 @@ export default function ProcessFlowChartArea({ configurationId }: ProcessFlowCha
     taktTime: number;
     flowChartData?: {
       totalSeconds: number;
-      totalHours: number;
       balanceRate: number;
       maxStationSeconds: number;
     };
@@ -282,7 +281,7 @@ export default function ProcessFlowChartArea({ configurationId }: ProcessFlowCha
         let allSolutions: { stations: WorkStation[], variance: number, workloads: number[] }[] = [];
 
         console.log(`\n===== 开始完全枚举 (${n}个工序) =====`);
-        console.log('工序列表:', processes.map(p => `${p.process_name}(${(p.work_hours*3600).toFixed(0)}s)`).join(', '));
+        console.log('工序列表:', processes.map(p => `${p.process_name}(${p.work_seconds}s)`).join(', '));
         console.log('瓶颈约束:', bottleneckSeconds + 's\n');
 
         // 验证工位等级顺序：确保后面的工位的最小等级 >= 前面工位的最大等级
@@ -788,7 +787,7 @@ export default function ProcessFlowChartArea({ configurationId }: ProcessFlowCha
                                   onClick={() => startEditWorkTime(seq)}
                                   className="text-xs font-medium text-blue-700 hover:text-blue-900 flex items-center gap-1"
                                 >
-                                  工时: {(seq.work_hours * 3600).toFixed(0)}秒
+                                  工时: {seq.work_seconds}秒
                                   <Edit2 size={12} />
                                 </button>
                               )}
@@ -819,11 +818,11 @@ export default function ProcessFlowChartArea({ configurationId }: ProcessFlowCha
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="bg-white rounded-lg p-4 shadow">
               <p className="text-sm text-gray-600 mb-1">最优工位数（已优化）</p>
-              <p className="text-3xl font-bold text-blue-600">{flowChartData.totalWorkers} 人</p>
+              <p className="text-3xl font-bold text-blue-600">{flowChartData.totalWorkers || 0} 人</p>
             </div>
             <div className="bg-white rounded-lg p-4 shadow">
               <p className="text-sm text-gray-600 mb-1">节拍时间</p>
-              <p className="text-3xl font-bold text-green-600">{flowChartData.taktTime.toFixed(2)} 秒</p>
+              <p className="text-3xl font-bold text-green-600">{(flowChartData.taktTime || 0).toFixed(2)} 秒</p>
             </div>
             <div className="bg-white rounded-lg p-4 shadow">
               <p className="text-sm text-gray-600 mb-1">生产线平衡率</p>
@@ -851,9 +850,9 @@ export default function ProcessFlowChartArea({ configurationId }: ProcessFlowCha
                 </p>
                 <p className="mt-2 text-gray-600 space-y-1">
                   <span className="block">• 总工时 = 所有工序工时之和 = {((flowChartData.flowChartData?.totalSeconds || 0)).toFixed(0)}秒</span>
-                  <span className="block">• 工位数 = {flowChartData.totalWorkers}个</span>
+                  <span className="block">• 工位数 = {flowChartData.totalWorkers || 0}个</span>
                   <span className="block">• 最大工位工时 = 所有工位中工时最多的那个 = {((flowChartData.flowChartData?.maxStationSeconds || 0)).toFixed(0)}秒</span>
-                  <span className="block mt-2">• 平衡率 = ({((flowChartData.flowChartData?.totalSeconds || 0)).toFixed(0)}秒 ÷ ({flowChartData.totalWorkers} × {((flowChartData.flowChartData?.maxStationSeconds || 0)).toFixed(0)}秒)) × 100%
+                  <span className="block mt-2">• 平衡率 = ({((flowChartData.flowChartData?.totalSeconds || 0)).toFixed(0)}秒 ÷ ({flowChartData.totalWorkers || 0} × {((flowChartData.flowChartData?.maxStationSeconds || 0)).toFixed(0)}秒)) × 100%
                   = <span className="font-bold text-blue-700">{((flowChartData.flowChartData?.balanceRate || 0)).toFixed(1)}%</span></span>
                 </p>
               </div>
@@ -865,7 +864,7 @@ export default function ProcessFlowChartArea({ configurationId }: ProcessFlowCha
                 </p>
                 <p className="mt-2 text-gray-600">
                   生产线的实际节拍受最慢工位（瓶颈工位）限制。当前实际节拍 =
-                  <span className="font-bold text-green-700"> {flowChartData.taktTime.toFixed(0)}秒/件</span>
+                  <span className="font-bold text-green-700"> {(flowChartData.taktTime || 0).toFixed(0)}秒/件</span>
                 </p>
               </div>
 
@@ -903,8 +902,8 @@ export default function ProcessFlowChartArea({ configurationId }: ProcessFlowCha
             </h5>
             <div className="space-y-3">
               {workStations.map((station) => {
-                const stationSeconds = station.totalHours * 3600;
-                const balancePercentage = ((station.totalHours * 3600) / (flowChartData.flowChartData?.maxStationSeconds || 1)) * 100;
+                const stationSeconds = station.totalSeconds;
+                const balancePercentage = (station.totalSeconds / (flowChartData.flowChartData?.maxStationSeconds || 1)) * 100;
                 return (
                   <div key={station.id} className="bg-white rounded-lg border-2 border-blue-300 p-4">
                     <div className="flex items-center justify-between mb-3">
@@ -930,7 +929,7 @@ export default function ProcessFlowChartArea({ configurationId }: ProcessFlowCha
                         >
                           <div className="flex items-start justify-between mb-1">
                             <span className="text-xs font-semibold text-blue-800">L{process.sequence_level}</span>
-                            <span className="text-xs text-blue-600">{(process.work_hours * 3600).toFixed(0)}s</span>
+                            <span className="text-xs text-blue-600">{process.work_seconds}s</span>
                           </div>
                           <p className="text-sm font-medium text-gray-800 leading-tight">{process.process_name}</p>
                           {process.description && (
