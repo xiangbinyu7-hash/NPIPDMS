@@ -258,7 +258,7 @@ export default function ProcessFlowChartArea({ configurationId }: ProcessFlowCha
         return Math.sqrt(calculateVariance(workloads));
       }
 
-      // 完全枚举算法：保存所有有效方案，计算方差，选出最小的
+      // 完全枚举算法：允许同等级工序灵活分配到任意工位
       function findOptimalStations(processes: ProcessSequence[]): WorkStation[] {
         const n = processes.length;
         if (n === 0) return [];
@@ -269,7 +269,7 @@ export default function ProcessFlowChartArea({ configurationId }: ProcessFlowCha
         console.log('工序列表:', processes.map(p => `${p.process_name}(${(p.work_hours*3600).toFixed(0)}s)`).join(', '));
         console.log('瓶颈约束:', bottleneckSeconds + 's\n');
 
-        // 递归枚举所有工位分配方案
+        // 递归枚举：每个工序可以加入到任意已存在的工位，或开启新工位
         function enumerate(index: number, currentStations: WorkStation[]) {
           // 所有工序已分配完成
           if (index === n) {
@@ -295,21 +295,22 @@ export default function ProcessFlowChartArea({ configurationId }: ProcessFlowCha
           }
 
           const currentProcess = processes[index];
+          const currentProcessSeconds = currentProcess.work_hours * 3600;
 
-          // 选择1：加入最后一个工位（如果存在且不超过瓶颈）
-          if (currentStations.length > 0) {
-            const lastStation = currentStations[currentStations.length - 1];
-            const newTotal = lastStation.totalHours + currentProcess.work_hours;
+          // 选择1：尝试加入到每一个已存在的工位
+          for (let i = 0; i < currentStations.length; i++) {
+            const station = currentStations[i];
+            const newTotal = station.totalHours * 3600 + currentProcessSeconds;
 
-            if (newTotal * 3600 <= bottleneckSeconds) {
-              lastStation.processes.push(currentProcess);
-              lastStation.totalHours = newTotal;
+            if (newTotal <= bottleneckSeconds) {
+              station.processes.push(currentProcess);
+              station.totalHours += currentProcess.work_hours;
 
               enumerate(index + 1, currentStations);
 
               // 回溯
-              lastStation.processes.pop();
-              lastStation.totalHours -= currentProcess.work_hours;
+              station.processes.pop();
+              station.totalHours -= currentProcess.work_hours;
             }
           }
 
