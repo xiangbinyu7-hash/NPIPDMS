@@ -269,6 +269,19 @@ export default function ProcessFlowChartArea({ configurationId }: ProcessFlowCha
         console.log('工序列表:', processes.map(p => `${p.process_name}(${(p.work_hours*3600).toFixed(0)}s)`).join(', '));
         console.log('瓶颈约束:', bottleneckSeconds + 's\n');
 
+        // 验证工位等级顺序：确保后面的工位的最小等级 >= 前面工位的最大等级
+        function validateLevelOrder(stations: WorkStation[]): boolean {
+          for (let i = 0; i < stations.length - 1; i++) {
+            const currentMaxLevel = Math.max(...stations[i].processes.map(p => p.sequence_level));
+            const nextMinLevel = Math.min(...stations[i + 1].processes.map(p => p.sequence_level));
+
+            if (currentMaxLevel > nextMinLevel) {
+              return false; // 违反等级顺序
+            }
+          }
+          return true;
+        }
+
         // 递归枚举：每个工序可以加入到任意已存在的工位，或开启新工位
         function enumerate(index: number, currentStations: WorkStation[]) {
           // 所有工序已分配完成
@@ -276,6 +289,11 @@ export default function ProcessFlowChartArea({ configurationId }: ProcessFlowCha
             // 检查所有工位是否满足瓶颈约束
             const allValid = currentStations.every(s => s.totalHours * 3600 <= bottleneckSeconds);
             if (!allValid) return;
+
+            // 验证工位等级顺序
+            if (!validateLevelOrder(currentStations)) {
+              return; // 不符合等级顺序要求，丢弃此方案
+            }
 
             // 计算当前方案的工位工时
             const workloads = currentStations.map(s => s.totalHours * 3600);
@@ -296,6 +314,7 @@ export default function ProcessFlowChartArea({ configurationId }: ProcessFlowCha
 
           const currentProcess = processes[index];
           const currentProcessSeconds = currentProcess.work_hours * 3600;
+          const currentLevel = currentProcess.sequence_level;
 
           // 选择1：尝试加入到每一个已存在的工位
           for (let i = 0; i < currentStations.length; i++) {
@@ -303,14 +322,31 @@ export default function ProcessFlowChartArea({ configurationId }: ProcessFlowCha
             const newTotal = station.totalHours * 3600 + currentProcessSeconds;
 
             if (newTotal <= bottleneckSeconds) {
-              station.processes.push(currentProcess);
-              station.totalHours += currentProcess.work_hours;
+              // 检查加入后是否会违反等级顺序
+              const stationMaxLevel = station.processes.length > 0
+                ? Math.max(...station.processes.map(p => p.sequence_level))
+                : 0;
 
-              enumerate(index + 1, currentStations);
+              // 如果当前工位后面还有工位，检查等级约束
+              let canAdd = true;
+              if (i < currentStations.length - 1) {
+                const nextMinLevel = Math.min(...currentStations[i + 1].processes.map(p => p.sequence_level));
+                // 加入当前工序后，本工位的最大等级不能超过下一个工位的最小等级
+                if (currentLevel > nextMinLevel) {
+                  canAdd = false;
+                }
+              }
 
-              // 回溯
-              station.processes.pop();
-              station.totalHours -= currentProcess.work_hours;
+              if (canAdd) {
+                station.processes.push(currentProcess);
+                station.totalHours += currentProcess.work_hours;
+
+                enumerate(index + 1, currentStations);
+
+                // 回溯
+                station.processes.pop();
+                station.totalHours -= currentProcess.work_hours;
+              }
             }
           }
 
