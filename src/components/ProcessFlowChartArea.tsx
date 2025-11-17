@@ -258,65 +258,54 @@ export default function ProcessFlowChartArea({ configurationId }: ProcessFlowCha
         return Math.sqrt(calculateVariance(workloads));
       }
 
-      // 回溯搜索：枚举所有可能的分割方案，找全局最优
+      // 完全枚举算法：保存所有有效方案，计算方差，选出最小的
       function findOptimalStations(processes: ProcessSequence[]): WorkStation[] {
         const n = processes.length;
         if (n === 0) return [];
 
-        let bestSolution: WorkStation[] = [];
-        let bestVariance = Infinity;
-        let solutionCount = 0;
+        let allSolutions: { stations: WorkStation[], variance: number, workloads: number[] }[] = [];
 
-        console.log(`\n===== 开始回溯搜索 (${n}个工序) =====`);
+        console.log(`\n===== 开始完全枚举 (${n}个工序) =====`);
         console.log('工序列表:', processes.map(p => `${p.process_name}(${(p.work_hours*3600).toFixed(0)}s)`).join(', '));
-        console.log('瓶颈约束:', bottleneckSeconds + 's');
+        console.log('瓶颈约束:', bottleneckSeconds + 's\n');
 
-        // 使用分割点表示方案：[0, 1, 0, 1, 0] 表示在位置1和3后分割
-        // 递归生成所有合法的分割方案
-        function backtrack(index: number, currentStations: WorkStation[]) {
-          // 所有工序都已分配
+        // 递归枚举所有工位分配方案
+        function enumerate(index: number, currentStations: WorkStation[]) {
+          // 所有工序已分配完成
           if (index === n) {
-            solutionCount++;
-
             // 检查所有工位是否满足瓶颈约束
             const allValid = currentStations.every(s => s.totalHours * 3600 <= bottleneckSeconds);
             if (!allValid) return;
 
-            // 计算当前方案的方差
+            // 计算当前方案的工位工时
             const workloads = currentStations.map(s => s.totalHours * 3600);
             const variance = calculateVariance(workloads);
 
-            // 更新最优解
-            if (variance < bestVariance) {
-              console.log(`\n找到更优解 #${solutionCount} (方差=${variance.toFixed(0)}):`);
-              currentStations.forEach((s, idx) => {
-                const processNames = s.processes.map(p => p.process_name).join('、');
-                const totalSec = s.totalHours * 3600;
-                console.log(`  工位${idx+1}: ${processNames} = ${totalSec.toFixed(0)}s`);
-              });
-
-              bestVariance = variance;
-              bestSolution = currentStations.map(s => ({
+            // 保存这个有效方案（深拷贝）
+            allSolutions.push({
+              stations: currentStations.map(s => ({
                 ...s,
                 processes: [...s.processes]
-              }));
-            }
+              })),
+              variance: variance,
+              workloads: [...workloads]
+            });
+
             return;
           }
 
           const currentProcess = processes[index];
-          const currentProcessSeconds = currentProcess.work_hours * 3600;
 
           // 选择1：加入最后一个工位（如果存在且不超过瓶颈）
           if (currentStations.length > 0) {
             const lastStation = currentStations[currentStations.length - 1];
-            const newTotalSeconds = lastStation.totalHours * 3600 + currentProcessSeconds;
+            const newTotal = lastStation.totalHours + currentProcess.work_hours;
 
-            if (newTotalSeconds <= bottleneckSeconds) {
+            if (newTotal * 3600 <= bottleneckSeconds) {
               lastStation.processes.push(currentProcess);
-              lastStation.totalHours += currentProcess.work_hours;
+              lastStation.totalHours = newTotal;
 
-              backtrack(index + 1, currentStations);
+              enumerate(index + 1, currentStations);
 
               // 回溯
               lastStation.processes.pop();
@@ -331,19 +320,41 @@ export default function ProcessFlowChartArea({ configurationId }: ProcessFlowCha
             totalHours: currentProcess.work_hours
           });
 
-          backtrack(index + 1, currentStations);
+          enumerate(index + 1, currentStations);
 
           // 回溯
           currentStations.pop();
         }
 
-        backtrack(0, []);
+        // 开始枚举
+        enumerate(0, []);
 
-        console.log(`\n总共探索了 ${solutionCount} 种方案`);
-        console.log(`最优方差: ${bestVariance.toFixed(0)}`);
-        console.log('===== 回溯搜索完成 =====\n');
+        console.log(`\n总共找到 ${allSolutions.length} 种有效方案\n`);
 
-        return bestSolution;
+        // 按方差排序
+        if (allSolutions.length === 0) {
+          console.log('未找到有效方案！');
+          return [];
+        }
+
+        allSolutions.sort((a, b) => a.variance - b.variance);
+
+        // 输出前10个最优方案
+        const topN = Math.min(10, allSolutions.length);
+        console.log(`前 ${topN} 个最优方案（按方差从小到大）：\n`);
+        for (let i = 0; i < topN; i++) {
+          const sol = allSolutions[i];
+          console.log(`方案 ${i+1} - 方差=${sol.variance.toFixed(2)}:`);
+          sol.stations.forEach((s, idx) => {
+            const processNames = s.processes.map(p => p.process_name).join('、');
+            console.log(`  工位${idx+1}: ${processNames} = ${sol.workloads[idx].toFixed(0)}s`);
+          });
+          console.log('');
+        }
+
+        console.log('===== 选择方差最小的方案 =====\n');
+
+        return allSolutions[0].stations;
       }
 
       // 贪心算法（备用）
