@@ -148,6 +148,7 @@ export default function ProcessFlowChartArea({ configurationId }: ProcessFlowCha
     if (isNaN(newLevel) || newLevel <= 0) {
       alert('请输入有效的等级数字');
       setEditingLevelId(null);
+      setTempLevel('');
       return;
     }
 
@@ -183,7 +184,8 @@ export default function ProcessFlowChartArea({ configurationId }: ProcessFlowCha
       }
 
       setEditingLevelId(null);
-      loadSequences();
+      setTempLevel('');
+      await loadSequences();
     } catch (error) {
       alert('更新等级失败');
     } finally {
@@ -201,19 +203,33 @@ export default function ProcessFlowChartArea({ configurationId }: ProcessFlowCha
     if (isNaN(newSeconds) || newSeconds < 0) {
       alert('请输入有效的工时（秒）');
       setEditingWorkTimeId(null);
+      setTempWorkTime('');
       return;
     }
 
     setLoading(true);
     try {
-      await supabase
-        .from('process_sequences')
-        .update({ work_hours: newSeconds / 3600 })
-        .eq('id', id);
+      const newHours = newSeconds / 3600;
+      console.log(`更新工时: ${newSeconds}秒 = ${newHours}小时`);
 
+      const { data, error } = await supabase
+        .from('process_sequences')
+        .update({ work_hours: newHours })
+        .eq('id', id)
+        .select();
+
+      if (error) {
+        console.error('更新工时失败:', error);
+        alert('更新工时失败: ' + error.message);
+        return;
+      }
+
+      console.log('更新成功:', data);
       setEditingWorkTimeId(null);
-      loadSequences();
+      setTempWorkTime('');
+      await loadSequences();
     } catch (error) {
+      console.error('更新工时异常:', error);
       alert('更新工时失败');
     } finally {
       setLoading(false);
@@ -669,21 +685,39 @@ export default function ProcessFlowChartArea({ configurationId }: ProcessFlowCha
                                   <input
                                     type="number"
                                     step="0.1"
+                                    min="1"
                                     value={tempLevel}
                                     onChange={(e) => setTempLevel(e.target.value)}
                                     onKeyDown={(e) => {
                                       if (e.key === 'Enter') {
+                                        e.preventDefault();
                                         handleLevelChange(seq.id);
                                       }
+                                      if (e.key === 'Escape') {
+                                        setEditingLevelId(null);
+                                        setTempLevel('');
+                                      }
                                     }}
-                                    className="w-16 px-2 py-1 border border-blue-500 rounded text-xs"
+                                    className="w-16 px-2 py-1 border border-blue-500 rounded text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
                                     autoFocus
                                   />
                                   <button
                                     onClick={() => handleLevelChange(seq.id)}
-                                    className="p-0.5 text-green-600 hover:bg-green-50 rounded"
+                                    disabled={loading}
+                                    className="p-1 text-white bg-green-600 hover:bg-green-700 rounded disabled:bg-gray-400 transition-colors"
+                                    title="确认修改"
                                   >
                                     <Check size={14} />
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setEditingLevelId(null);
+                                      setTempLevel('');
+                                    }}
+                                    className="p-1 text-gray-600 hover:bg-gray-100 rounded transition-colors"
+                                    title="取消"
+                                  >
+                                    ✕
                                   </button>
                                 </div>
                               ) : (
@@ -713,22 +747,40 @@ export default function ProcessFlowChartArea({ configurationId }: ProcessFlowCha
                                   <input
                                     type="number"
                                     step="1"
+                                    min="0"
                                     value={tempWorkTime}
                                     onChange={(e) => setTempWorkTime(e.target.value)}
                                     onKeyDown={(e) => {
                                       if (e.key === 'Enter') {
+                                        e.preventDefault();
                                         handleWorkTimeChange(seq.id);
                                       }
+                                      if (e.key === 'Escape') {
+                                        setEditingWorkTimeId(null);
+                                        setTempWorkTime('');
+                                      }
                                     }}
-                                    className="w-20 px-2 py-1 border border-blue-500 rounded text-xs"
+                                    className="w-20 px-2 py-1 border border-blue-500 rounded text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
                                     autoFocus
                                   />
                                   <span className="text-xs text-gray-500">秒</span>
                                   <button
                                     onClick={() => handleWorkTimeChange(seq.id)}
-                                    className="p-0.5 text-green-600 hover:bg-green-50 rounded"
+                                    disabled={loading}
+                                    className="p-1 text-white bg-green-600 hover:bg-green-700 rounded disabled:bg-gray-400 transition-colors"
+                                    title="确认修改"
                                   >
                                     <Check size={14} />
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setEditingWorkTimeId(null);
+                                      setTempWorkTime('');
+                                    }}
+                                    className="p-1 text-gray-600 hover:bg-gray-100 rounded transition-colors"
+                                    title="取消"
+                                  >
+                                    ✕
                                   </button>
                                 </div>
                               ) : (
