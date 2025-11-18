@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Plus, Save, RotateCcw, Edit2, Trash2 } from 'lucide-react';
+import { Plus, Save, RotateCcw, Trash2, Link2 } from 'lucide-react';
 
 interface FlowNode {
   id: string;
@@ -43,6 +43,8 @@ export default function ProcessFlowLayoutEditor({
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
   const [editLabel, setEditLabel] = useState('');
   const [editSubtitle, setEditSubtitle] = useState('');
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [connectFromId, setConnectFromId] = useState<string | null>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -122,7 +124,7 @@ export default function ProcessFlowLayoutEditor({
   };
 
   const handleMouseDown = (e: React.MouseEvent, nodeId: string) => {
-    if (editingNodeId) return;
+    if (editingNodeId || isConnecting) return;
 
     const node = nodes.find(n => n.id === nodeId);
     if (!node) return;
@@ -156,13 +158,14 @@ export default function ProcessFlowLayoutEditor({
     setDraggingNodeId(null);
   };
 
-  const startEditing = (nodeId: string) => {
+  const handleDoubleClick = (nodeId: string) => {
     const node = nodes.find(n => n.id === nodeId);
     if (!node) return;
 
     setEditingNodeId(nodeId);
     setEditLabel(node.label);
     setEditSubtitle(node.subtitle || '');
+    setSelectedNodeId(null);
   };
 
   const saveEdit = () => {
@@ -181,6 +184,12 @@ export default function ProcessFlowLayoutEditor({
 
     setNodes(newNodes);
     setEditingNodeId(null);
+  };
+
+  const cancelEdit = () => {
+    setEditingNodeId(null);
+    setEditLabel('');
+    setEditSubtitle('');
   };
 
   const deleteNode = (nodeId: string) => {
@@ -202,7 +211,7 @@ export default function ProcessFlowLayoutEditor({
       id: newId,
       type: 'process',
       label: '新工位',
-      subtitle: '点击编辑',
+      subtitle: '双击编辑',
       x: 400,
       y: 100,
       width: 160,
@@ -213,11 +222,40 @@ export default function ProcessFlowLayoutEditor({
     setSelectedNodeId(newId);
   };
 
+  const startConnecting = () => {
+    setIsConnecting(true);
+    setConnectFromId(null);
+    setSelectedNodeId(null);
+  };
+
+  const handleNodeClickInConnectMode = (nodeId: string) => {
+    if (!isConnecting) return;
+
+    if (!connectFromId) {
+      setConnectFromId(nodeId);
+    } else {
+      if (connectFromId !== nodeId) {
+        const exists = connections.some(
+          c => c.from === connectFromId && c.to === nodeId
+        );
+        if (!exists) {
+          setConnections([...connections, { from: connectFromId, to: nodeId }]);
+        }
+      }
+      setConnectFromId(null);
+      setIsConnecting(false);
+    }
+  };
+
+  const deleteConnection = (from: string, to: string) => {
+    setConnections(connections.filter(c => !(c.from === from && c.to === to)));
+  };
+
   const handleSave = () => {
     if (onSave) {
       onSave(nodes, connections);
     }
-    alert('流程图已保存');
+    alert('Layout图已保存');
   };
 
   const getConnectionPath = (from: FlowNode, to: FlowNode) => {
@@ -235,25 +273,46 @@ export default function ProcessFlowLayoutEditor({
     const isSelected = selectedNodeId === node.id;
     const isEditing = editingNodeId === node.id;
     const isTerminal = node.type === 'start' || node.type === 'end';
+    const isConnectFrom = connectFromId === node.id;
 
     return (
       <div
         key={node.id}
-        className={`absolute cursor-move ${isSelected ? 'ring-2 ring-blue-500' : ''}`}
+        className={`absolute ${isConnecting ? 'cursor-crosshair' : 'cursor-move'} ${
+          isSelected ? 'ring-2 ring-blue-500' : ''
+        } ${isConnectFrom ? 'ring-4 ring-green-500' : ''}`}
         style={{
           left: node.x,
           top: node.y,
           width: node.width,
           height: node.height
         }}
-        onMouseDown={(e) => handleMouseDown(e, node.id)}
+        onMouseDown={(e) => {
+          if (!isConnecting) {
+            handleMouseDown(e, node.id);
+          }
+        }}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (isConnecting) {
+            handleNodeClickInConnectMode(node.id);
+          }
+        }}
+        onDoubleClick={(e) => {
+          e.stopPropagation();
+          if (!isConnecting) {
+            handleDoubleClick(node.id);
+          }
+        }}
       >
         <div
           className={`w-full h-full flex flex-col items-center justify-center border-2 shadow-lg transition-all ${
             isTerminal
               ? 'rounded-full bg-white border-gray-400'
               : 'rounded-lg bg-blue-50 border-blue-400'
-          } ${isSelected ? 'shadow-xl scale-105' : ''}`}
+          } ${isSelected ? 'shadow-xl scale-105' : ''} ${
+            isConnectFrom ? 'border-green-500 bg-green-50' : ''
+          }`}
         >
           {isEditing ? (
             <div className="p-2 space-y-1 w-full" onClick={(e) => e.stopPropagation()}>
@@ -262,13 +321,28 @@ export default function ProcessFlowLayoutEditor({
                 value={editLabel}
                 onChange={(e) => setEditLabel(e.target.value)}
                 className="w-full px-2 py-1 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="节点标题"
                 autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    saveEdit();
+                  } else if (e.key === 'Escape') {
+                    cancelEdit();
+                  }
+                }}
               />
               <textarea
                 value={editSubtitle}
                 onChange={(e) => setEditSubtitle(e.target.value)}
                 className="w-full px-2 py-1 text-xs border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="节点副标题（可选）"
                 rows={2}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') {
+                    cancelEdit();
+                  }
+                }}
               />
               <div className="flex gap-1">
                 <button
@@ -278,7 +352,7 @@ export default function ProcessFlowLayoutEditor({
                   保存
                 </button>
                 <button
-                  onClick={() => setEditingNodeId(null)}
+                  onClick={cancelEdit}
                   className="flex-1 px-2 py-1 text-xs bg-gray-200 rounded hover:bg-gray-300"
                 >
                   取消
@@ -299,17 +373,17 @@ export default function ProcessFlowLayoutEditor({
           )}
         </div>
 
-        {isSelected && !isEditing && (
-          <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 flex gap-1 bg-white rounded shadow-lg p-1">
+        {isSelected && !isEditing && !isConnecting && (
+          <div className="absolute -top-10 left-1/2 transform -translate-x-1/2 bg-white rounded-lg shadow-xl p-1 border-2 border-gray-200 flex gap-1 z-50">
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                startEditing(node.id);
+                handleDoubleClick(node.id);
               }}
-              className="p-1 hover:bg-blue-50 rounded"
-              title="编辑"
+              className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
+              title="编辑内容"
             >
-              <Edit2 className="w-4 h-4 text-blue-600" />
+              编辑
             </button>
             {!isTerminal && (
               <button
@@ -317,10 +391,10 @@ export default function ProcessFlowLayoutEditor({
                   e.stopPropagation();
                   deleteNode(node.id);
                 }}
-                className="p-1 hover:bg-red-50 rounded"
-                title="删除"
+                className="px-2 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700"
+                title="删除节点"
               >
-                <Trash2 className="w-4 h-4 text-red-600" />
+                删除
               </button>
             )}
           </div>
@@ -332,18 +406,38 @@ export default function ProcessFlowLayoutEditor({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h4 className="font-semibold text-gray-800">工艺流程图 Layout</h4>
+        <h4 className="font-semibold text-gray-800">Layout图</h4>
         <div className="flex gap-2">
           <button
             onClick={addProcessNode}
             className="flex items-center gap-2 px-3 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700"
+            disabled={isConnecting}
           >
             <Plus className="w-4 h-4" />
             添加工位
           </button>
           <button
+            onClick={() => {
+              if (isConnecting) {
+                setIsConnecting(false);
+                setConnectFromId(null);
+              } else {
+                startConnecting();
+              }
+            }}
+            className={`flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg ${
+              isConnecting
+                ? 'bg-red-600 hover:bg-red-700 text-white'
+                : 'bg-orange-600 hover:bg-orange-700 text-white'
+            }`}
+          >
+            <Link2 className="w-4 h-4" />
+            {isConnecting ? '取消连接' : '连接工位'}
+          </button>
+          <button
             onClick={generateFlowChart}
             className="flex items-center gap-2 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            disabled={isConnecting}
           >
             <RotateCcw className="w-4 h-4" />
             重新生成
@@ -351,12 +445,24 @@ export default function ProcessFlowLayoutEditor({
           <button
             onClick={handleSave}
             className="flex items-center gap-2 px-3 py-1.5 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+            disabled={isConnecting}
           >
             <Save className="w-4 h-4" />
             保存布局
           </button>
         </div>
       </div>
+
+      {isConnecting && (
+        <div className="bg-green-50 border-2 border-green-500 rounded-lg p-3">
+          <p className="text-sm font-semibold text-green-800">
+            连接模式：
+            {connectFromId
+              ? '请点击目标节点完成连接'
+              : '请点击起始节点'}
+          </p>
+        </div>
+      )}
 
       <div
         ref={canvasRef}
@@ -369,7 +475,12 @@ export default function ProcessFlowLayoutEditor({
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
-        onClick={() => setSelectedNodeId(null)}
+        onClick={() => {
+          if (!isConnecting) {
+            setSelectedNodeId(null);
+          }
+        }}
+        onContextMenu={(e) => e.preventDefault()}
       >
         <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ zIndex: 1 }}>
           {connections.map((conn, index) => {
@@ -377,15 +488,56 @@ export default function ProcessFlowLayoutEditor({
             const toNode = nodes.find(n => n.id === conn.to);
             if (!fromNode || !toNode) return null;
 
+            const path = getConnectionPath(fromNode, toNode);
+            const midPoint = {
+              x: (fromNode.x + fromNode.width + toNode.x) / 2,
+              y: (fromNode.y + fromNode.height / 2 + toNode.y + toNode.height / 2) / 2
+            };
+
             return (
               <g key={index}>
                 <path
-                  d={getConnectionPath(fromNode, toNode)}
+                  d={path}
                   stroke="#3b82f6"
                   strokeWidth="2"
                   fill="none"
                   markerEnd="url(#arrowhead)"
+                  className="hover:stroke-red-500 cursor-pointer"
+                  style={{ pointerEvents: 'stroke' }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (!isConnecting && confirm('删除这条连接线？')) {
+                      deleteConnection(conn.from, conn.to);
+                    }
+                  }}
                 />
+                <circle
+                  cx={midPoint.x}
+                  cy={midPoint.y}
+                  r="8"
+                  fill="white"
+                  stroke="#3b82f6"
+                  strokeWidth="2"
+                  className="hover:fill-red-100 cursor-pointer"
+                  style={{ pointerEvents: 'all' }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (!isConnecting && confirm('删除这条连接线？')) {
+                      deleteConnection(conn.from, conn.to);
+                    }
+                  }}
+                />
+                <text
+                  x={midPoint.x}
+                  y={midPoint.y}
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  fontSize="10"
+                  fill="#3b82f6"
+                  className="pointer-events-none"
+                >
+                  ×
+                </text>
               </g>
             );
           })}
@@ -411,10 +563,12 @@ export default function ProcessFlowLayoutEditor({
       <div className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">
         <p className="font-medium mb-1">操作说明：</p>
         <ul className="space-y-1 text-xs">
-          <li>• 拖拽节点可以调整位置</li>
-          <li>• 点击节点后可以使用顶部工具栏编辑或删除</li>
-          <li>• 点击"重新生成"可以根据最新的工位数据重新生成流程图</li>
-          <li>• 点击"保存布局"保存当前的流程图设计</li>
+          <li>• <span className="font-semibold">拖拽节点</span>：按住节点拖动调整位置</li>
+          <li>• <span className="font-semibold">编辑内容</span>：单击选中节点 → 点击"编辑"按钮（或双击节点直接编辑）</li>
+          <li>• <span className="font-semibold">连接节点</span>：点击"连接工位" → 点击起始节点 → 点击目标节点</li>
+          <li>• <span className="font-semibold">删除连接</span>：点击连接线中间的圆点</li>
+          <li>• <span className="font-semibold">删除节点</span>：选中节点 → 点击"删除"按钮</li>
+          <li>• 按Enter键保存编辑，按Esc键取消编辑</li>
         </ul>
       </div>
     </div>
