@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Plus, Trash2, Zap, Edit2, Check } from 'lucide-react';
+import ProcessFlowLayoutEditor from './ProcessFlowLayoutEditor';
 
 interface ProcessSequence {
   id: string;
@@ -1180,6 +1181,42 @@ export default function ProcessFlowChartArea({ configurationId, componentId }: P
               算法会尝试多种工位数配置，并为每种配置计算平衡率，最终选择平衡率最高的方案。
               工位负荷率显示各工位相对于瓶颈工位的负荷比例，越接近100%表示该工位利用率越高。
             </p>
+          </div>
+
+          <div className="border-t-4 border-purple-500 bg-white rounded-lg p-6 mt-6">
+            <ProcessFlowLayoutEditor
+              workStations={workStations}
+              componentId={componentId || ''}
+              onSave={async (nodes, connections) => {
+                console.log('Saving layout:', { nodes, connections });
+                const { data: existing } = await supabase
+                  .from('process_flow_charts')
+                  .select('id')
+                  .eq('configuration_id', configurationId)
+                  .eq('component_id', componentId)
+                  .maybeSingle();
+
+                const layoutData = {
+                  layout_nodes: nodes,
+                  layout_connections: connections,
+                  updated_at: new Date().toISOString()
+                };
+
+                if (existing) {
+                  const currentFlowData = flowChartData?.flowChartData || {};
+                  await supabase
+                    .from('process_flow_charts')
+                    .update({
+                      flow_chart_data: {
+                        ...currentFlowData,
+                        ...layoutData
+                      },
+                      updated_at: new Date().toISOString()
+                    })
+                    .eq('id', existing.id);
+                }
+              }}
+            />
           </div>
         </div>
       )}
