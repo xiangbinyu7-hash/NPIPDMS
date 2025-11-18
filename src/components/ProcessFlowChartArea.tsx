@@ -48,8 +48,17 @@ export default function ProcessFlowChartArea({ configurationId, componentId }: P
   } | null>(null);
 
   useEffect(() => {
-    loadSequences();
-    loadFlowChart();
+    console.log('Component changed, componentId:', componentId);
+    if (componentId) {
+      console.log('Loading sequences and flow chart for component:', componentId);
+      loadSequences();
+      loadFlowChart();
+    } else {
+      console.log('No component selected, clearing data');
+      setSequences([]);
+      setWorkStations([]);
+      setFlowChartData(null);
+    }
   }, [configurationId, componentId]);
 
   const loadSequences = async () => {
@@ -58,6 +67,7 @@ export default function ProcessFlowChartArea({ configurationId, componentId }: P
       return;
     }
 
+    console.log('Loading sequences for component:', componentId);
     const { data } = await supabase
       .from('process_sequences')
       .select('*')
@@ -66,17 +76,22 @@ export default function ProcessFlowChartArea({ configurationId, componentId }: P
       .order('sequence_level')
       .order('order_index');
 
+    console.log('Loaded sequences:', data?.length || 0, 'sequences');
     if (data) {
       setSequences(data);
+    } else {
+      setSequences([]);
     }
   };
 
   const loadFlowChart = async () => {
     if (!componentId) {
       setFlowChartData(null);
+      setWorkStations([]);
       return;
     }
 
+    console.log('Loading flow chart for component:', componentId);
     const { data } = await supabase
       .from('process_flow_charts')
       .select('*')
@@ -84,6 +99,7 @@ export default function ProcessFlowChartArea({ configurationId, componentId }: P
       .eq('component_id', componentId)
       .maybeSingle();
 
+    console.log('Flow chart data:', data ? 'Found' : 'Not found');
     if (data) {
       const totalSeconds = data.flow_chart_data?.totalSeconds || 0;
       const maxStationSeconds = data.flow_chart_data?.maxStationSeconds || 0;
@@ -99,8 +115,16 @@ export default function ProcessFlowChartArea({ configurationId, componentId }: P
       });
 
       if (data.flow_chart_data?.workStations) {
+        console.log('Setting work stations:', data.flow_chart_data.workStations.length);
         setWorkStations(data.flow_chart_data.workStations);
+      } else {
+        console.log('No work stations in flow chart data');
+        setWorkStations([]);
       }
+    } else {
+      console.log('Clearing flow chart data');
+      setFlowChartData(null);
+      setWorkStations([]);
     }
   };
 

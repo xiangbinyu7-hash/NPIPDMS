@@ -34,7 +34,10 @@ export default function ComponentSelector({
     if (!error && data) {
       setComponents(data);
       if (data.length > 0 && !selectedComponentId) {
+        console.log('Auto-selecting first component:', data[0].component_name);
         onSelectComponent(data[0].id);
+      } else if (data.length === 0) {
+        onSelectComponent(null);
       }
     }
   };
@@ -155,7 +158,10 @@ export default function ComponentSelector({
             ) : (
               <>
                 <button
-                  onClick={() => onSelectComponent(component.id)}
+                  onClick={() => {
+                    console.log('Selecting component:', component.component_name, 'ID:', component.id);
+                    onSelectComponent(component.id);
+                  }}
                   className="flex-1 text-left font-medium text-gray-900"
                 >
                   {component.component_name}
