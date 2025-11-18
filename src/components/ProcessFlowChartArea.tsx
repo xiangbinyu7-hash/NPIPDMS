@@ -782,30 +782,64 @@ export default function ProcessFlowChartArea({ configurationId, componentId }: P
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h3 className="text-xl font-semibold text-gray-800">工艺序列表</h3>
-        <div className="flex gap-2">
-          <button
-            onClick={() => setShowAddForm(!showAddForm)}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            <Plus size={18} />
-            添加工序
-          </button>
-          <button
-            onClick={generateFlowChart}
-            disabled={loading || sequences.length === 0}
-            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 transition-colors"
-          >
-            <Zap size={18} />
-            {loading ? '生成中...' : '智能生成流程图'}
-          </button>
+    <div className="space-y-8">
+      {/* 工作流程指示器 */}
+      <div className="bg-gradient-to-r from-blue-50 via-green-50 to-purple-50 border-2 border-blue-200 rounded-lg p-4">
+        <div className="flex items-center justify-between max-w-5xl mx-auto">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-lg">1</div>
+            <div>
+              <p className="font-semibold text-blue-800">工艺序列表</p>
+              <p className="text-xs text-blue-600">确定工序顺序</p>
+            </div>
+          </div>
+          <div className="text-2xl text-gray-400">→</div>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-green-600 text-white flex items-center justify-center font-bold text-lg">2</div>
+            <div>
+              <p className="font-semibold text-green-800">工艺展开流程图</p>
+              <p className="text-xs text-green-600">人数与节拍计算</p>
+            </div>
+          </div>
+          <div className="text-2xl text-gray-400">→</div>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-purple-600 text-white flex items-center justify-center font-bold text-lg">3</div>
+            <div>
+              <p className="font-semibold text-purple-800">Layout图</p>
+              <p className="text-xs text-purple-600">现场布局规划</p>
+            </div>
+          </div>
         </div>
       </div>
 
+      {/* 第一步：工艺序列表 */}
+      <div className="border-4 border-blue-300 rounded-xl overflow-hidden shadow-lg">
+        <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-4 flex justify-between items-center">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-full bg-white text-blue-600 flex items-center justify-center font-bold">1</div>
+            <h3 className="text-xl font-bold">工艺序列表</h3>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowAddForm(!showAddForm)}
+              className="flex items-center gap-2 px-4 py-2 bg-white text-blue-600 rounded-lg hover:bg-blue-50 transition-colors font-medium"
+            >
+              <Plus size={18} />
+              添加工序
+            </button>
+            <button
+              onClick={generateFlowChart}
+              disabled={loading || sequences.length === 0}
+              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 transition-colors font-medium"
+            >
+              <Zap size={18} />
+              {loading ? '生成中...' : '生成流程图 →'}
+            </button>
+          </div>
+        </div>
+        <div className="bg-blue-50 p-6">
       {showAddForm && (
-        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
+        <div className="bg-white border-2 border-blue-200 rounded-lg p-4 space-y-3 mb-4">
           <h4 className="font-medium text-gray-700">添加新工序</h4>
           <div className="grid grid-cols-4 gap-3">
             <input
@@ -1031,19 +1065,26 @@ export default function ProcessFlowChartArea({ configurationId, componentId }: P
             </div>
           </div>
         )}
-        <p className="text-sm text-gray-600">
-          提示：点击工序卡片中的"等级"或"工时"可编辑。等级输入小数（如2.5）可将工序插入到对应等级之间。按回车键或点击✓确认
+        <p className="text-sm text-blue-700 bg-white rounded p-3 border border-blue-200">
+          💡 提示：点击工序卡片中的"等级"或"工时"可编辑。等级输入小数（如2.5）可将工序插入到对应等级之间。
         </p>
+        </div>
+        </div>
       </div>
 
+      {/* 第二步：工艺展开流程图 */}
       {flowChartData && workStations.length > 0 && (
-        <div className="bg-gradient-to-r from-green-50 to-blue-50 border border-green-200 rounded-lg p-6 space-y-6">
-          <div className="flex items-center justify-between">
-            <h4 className="text-lg font-semibold text-gray-800">工艺展开流程图（智能优化结果）</h4>
-            <div className="bg-gradient-to-r from-green-600 to-blue-600 text-white px-4 py-2 rounded-lg text-sm font-semibold shadow-lg">
-              ✨ 已自动优化至最佳平衡率
+        <div className="border-4 border-green-300 rounded-xl overflow-hidden shadow-lg">
+          <div className="bg-gradient-to-r from-green-600 to-green-700 text-white px-6 py-4 flex justify-between items-center">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-white text-green-600 flex items-center justify-center font-bold">2</div>
+              <h3 className="text-xl font-bold">工艺展开流程图</h3>
+              <div className="ml-4 bg-white/20 px-3 py-1 rounded-full text-sm">
+                ✨ 已自动优化至最佳平衡率
+              </div>
             </div>
           </div>
+          <div className="bg-green-50 p-6 space-y-6">
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="bg-white rounded-lg p-4 shadow">
@@ -1068,103 +1109,68 @@ export default function ProcessFlowChartArea({ configurationId, componentId }: P
             </div>
           </div>
 
-          <div className="bg-white rounded-lg p-5 shadow border-l-4 border-blue-500">
-            <h5 className="font-bold text-gray-800 mb-3 flex items-center gap-2">
-              <span className="text-blue-600">📊</span> 生产线平衡计算逻辑与依据
-            </h5>
-            <div className="space-y-3 text-sm text-gray-700">
+          <details className="bg-white rounded-lg shadow border-l-4 border-green-500">
+            <summary className="cursor-pointer p-4 font-semibold text-gray-800 hover:bg-gray-50 flex items-center gap-2">
+              <span className="text-green-600">📊</span> 查看详细计算逻辑与公式
+            </summary>
+            <div className="px-4 pb-4 space-y-3 text-sm text-gray-700">
               <div className="bg-blue-50 p-3 rounded">
-                <p className="font-semibold text-blue-800 mb-1">1. 平衡率计算公式：</p>
-                <p className="font-mono bg-white px-3 py-2 rounded border border-blue-200">
-                  平衡率 = (总工时 ÷ (工位数 × 最大工位工时)) × 100%
-                </p>
-                <p className="mt-2 text-gray-600 space-y-1">
-                  <span className="block">• 总工时 = 所有工序工时之和 = {((flowChartData.flowChartData?.totalSeconds || 0)).toFixed(0)}秒</span>
-                  <span className="block">• 工位数 = {flowChartData.totalWorkers || 0}个</span>
-                  <span className="block">• 最大工位工时 = 所有工位中工时最多的那个 = {((flowChartData.flowChartData?.maxStationSeconds || 0)).toFixed(0)}秒</span>
-                  <span className="block mt-2">• 平衡率 = ({((flowChartData.flowChartData?.totalSeconds || 0)).toFixed(0)}秒 ÷ ({flowChartData.totalWorkers || 0} × {((flowChartData.flowChartData?.maxStationSeconds || 0)).toFixed(0)}秒)) × 100%
-                  = <span className="font-bold text-blue-700">{((flowChartData.flowChartData?.balanceRate || 0)).toFixed(1)}%</span></span>
+                <p className="font-semibold text-blue-800 mb-1">平衡率 = (总工时 ÷ (工位数 × 最大工位工时)) × 100%</p>
+                <p className="mt-1 text-gray-600">
+                  = ({((flowChartData.flowChartData?.totalSeconds || 0)).toFixed(0)}秒 ÷ ({flowChartData.totalWorkers || 0} × {((flowChartData.flowChartData?.maxStationSeconds || 0)).toFixed(0)}秒)) × 100%
+                  = <span className="font-bold text-blue-700">{((flowChartData.flowChartData?.balanceRate || 0)).toFixed(1)}%</span>
                 </p>
               </div>
-
               <div className="bg-green-50 p-3 rounded">
-                <p className="font-semibold text-green-800 mb-1">2. 实际节拍时间：</p>
-                <p className="font-mono bg-white px-3 py-2 rounded border border-green-200">
-                  实际节拍时间 = 最大工位工时（生产瓶颈）
-                </p>
-                <p className="mt-2 text-gray-600">
-                  生产线的实际节拍受最慢工位（瓶颈工位）限制。当前实际节拍 =
-                  <span className="font-bold text-green-700"> {(flowChartData.taktTime || 0).toFixed(0)}秒/件</span>
-                </p>
+                <p className="font-semibold text-green-800 mb-1">实际节拍时间 = 最大工位工时 = {(flowChartData.taktTime || 0).toFixed(0)}秒/件</p>
               </div>
-
               <div className="bg-amber-50 p-3 rounded">
-                <p className="font-semibold text-amber-800 mb-1">3. 智能优化策略（核心算法）：</p>
-                <ul className="list-disc list-inside space-y-1 text-gray-600 ml-2">
-                  <li className="font-semibold text-amber-900">优化目标：自动调整工位数，使平衡率接近100%</li>
-                  <li>遍历所有可能的工位数量（1 ~ 工序总数）</li>
-                  <li>对每种工位数，计算目标平均工时 = 总工时 ÷ 工位数</li>
-                  <li>按工序等级顺序分配，尽量使每个工位接近目标工时</li>
-                  <li>计算每种方案的平衡率，自动选择平衡率最高的方案</li>
+                <p className="font-semibold text-amber-800 mb-1">智能优化策略：</p>
+                <ul className="list-disc list-inside space-y-1 text-gray-600 ml-2 text-xs">
+                  <li>遍历所有可能的工位数量，计算每种方案的平衡率</li>
+                  <li>按工序等级顺序分配，使每个工位工时接近目标平均值</li>
+                  <li>自动选择平衡率最高的方案</li>
                   <li>当平衡率达到98%以上时提前终止（已达最优）</li>
                   <li className="font-semibold text-amber-900">结果：推荐的工位数能让生产线达到最佳平衡</li>
                 </ul>
               </div>
-
-              <div className="bg-purple-50 p-3 rounded">
-                <p className="font-semibold text-purple-800 mb-1">4. 优化目标与评价：</p>
-                <p className="text-gray-600">
-                  追求最高的生产线平衡率（理想值100%），使各工位工时尽可能接近，
-                  减少工位间的负荷差异，避免出现明显的瓶颈工位，提高整体生产效率和资源利用率。
-                  当前智能推荐方案的平衡率为
-                  <span className="font-bold text-purple-700"> {((flowChartData.flowChartData?.balanceRate || 0)).toFixed(1)}%</span>
-                  {(flowChartData.flowChartData?.balanceRate || 0) >= 90 ? '，属于优秀水平，各工位负荷非常均衡' :
-                   (flowChartData.flowChartData?.balanceRate || 0) >= 80 ? '，属于良好水平，各工位负荷较为均衡' :
-                   (flowChartData.flowChartData?.balanceRate || 0) >= 70 ? '，属于中等水平，存在一定改进空间' : '，建议调整工序组合或增减工位数以提高平衡率'}
-                </p>
-              </div>
             </div>
-          </div>
+          </details>
 
           <div>
-            <h5 className="font-semibold text-gray-700 mb-4">
-              生产线拉线布局（最优平衡方案 - 平衡率 {((flowChartData.flowChartData?.balanceRate || 0)).toFixed(1)}%）
-            </h5>
-            <div className="space-y-3">
+            <h5 className="font-semibold text-gray-800 mb-3 text-lg">各工位详细分配</h5>
+            <div className="space-y-2 max-h-96 overflow-y-auto">
               {workStations.map((station) => {
                 const stationSeconds = station.totalSeconds;
                 const balancePercentage = (station.totalSeconds / (flowChartData.flowChartData?.maxStationSeconds || 1)) * 100;
                 return (
-                  <div key={station.id} className="bg-white rounded-lg border-2 border-blue-300 p-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <span className="text-lg font-bold text-blue-700">工位 {station.id}</span>
-                      <div className="flex items-center gap-3">
-                        <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-medium">
+                  <div key={station.id} className="bg-white rounded-lg border border-green-200 p-3 hover:shadow-md transition-shadow">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-base font-bold text-green-700">工位 {station.id}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs font-medium">
                           {stationSeconds.toFixed(0)}秒
                         </span>
-                        <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${
                           balancePercentage >= 90 ? 'bg-green-100 text-green-700' :
                           balancePercentage >= 80 ? 'bg-yellow-100 text-yellow-700' :
                           'bg-orange-100 text-orange-700'
                         }`}>
-                          负荷率: {balancePercentage.toFixed(1)}%
+                          {balancePercentage.toFixed(1)}%
                         </span>
                       </div>
                     </div>
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                    <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
                       {station.processes.map((process) => (
                         <div
                           key={process.id}
-                          className="bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200 rounded-lg p-3"
+                          className="bg-green-50 border border-green-200 rounded p-2"
                         >
-                          <div className="flex items-start justify-between mb-1">
-                            <span className="text-xs font-semibold text-blue-800">L{process.sequence_level}</span>
-                            <span className="text-xs text-blue-600">{process.work_seconds}s</span>
+                          <div className="flex items-start justify-between mb-0.5">
+                            <span className="text-xs font-semibold text-green-700">L{process.sequence_level}</span>
+                            <span className="text-xs text-green-600">{process.work_seconds}s</span>
                           </div>
-                          <p className="text-sm font-medium text-gray-800 leading-tight">{process.process_name}</p>
-                          {process.description && (
-                            <p className="text-xs text-gray-600 mt-1 truncate">{process.description}</p>
-                          )}
+                          <p className="text-xs font-medium text-gray-800 leading-tight">{process.process_name}</p>
                         </div>
                       ))}
                     </div>
@@ -1173,17 +1179,21 @@ export default function ProcessFlowChartArea({ configurationId, componentId }: P
               })}
             </div>
           </div>
-
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <p className="text-sm text-gray-700 leading-relaxed">
-              <span className="font-semibold text-blue-800">💡 说明：</span>
-              系统基于IE工业工程理论，采用启发式算法智能生成生产线布局方案。
-              算法会尝试多种工位数配置，并为每种配置计算平衡率，最终选择平衡率最高的方案。
-              工位负荷率显示各工位相对于瓶颈工位的负荷比例，越接近100%表示该工位利用率越高。
-            </p>
           </div>
+        </div>
+      )}
 
-          <div className="border-t-4 border-purple-500 bg-white rounded-lg p-6 mt-6">
+      {/* 第三步：Layout图 */}
+      {flowChartData && workStations.length > 0 && (
+        <div className="border-4 border-purple-300 rounded-xl overflow-hidden shadow-lg">
+          <div className="bg-gradient-to-r from-purple-600 to-purple-700 text-white px-6 py-4">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-white text-purple-600 flex items-center justify-center font-bold">3</div>
+              <h3 className="text-xl font-bold">Layout图</h3>
+              <span className="text-sm opacity-90">（现场布局规划）</span>
+            </div>
+          </div>
+          <div className="bg-purple-50 p-6">
             <ProcessFlowLayoutEditor
               workStations={workStations}
               componentId={componentId || ''}
