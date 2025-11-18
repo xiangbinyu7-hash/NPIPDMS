@@ -19,9 +19,10 @@ interface WorkStation {
 
 interface ProcessFlowChartAreaProps {
   configurationId: string;
+  componentId: string | null;
 }
 
-export default function ProcessFlowChartArea({ configurationId }: ProcessFlowChartAreaProps) {
+export default function ProcessFlowChartArea({ configurationId, componentId }: ProcessFlowChartAreaProps) {
   const [sequences, setSequences] = useState<ProcessSequence[]>([]);
   const [loading, setLoading] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -49,13 +50,19 @@ export default function ProcessFlowChartArea({ configurationId }: ProcessFlowCha
   useEffect(() => {
     loadSequences();
     loadFlowChart();
-  }, [configurationId]);
+  }, [configurationId, componentId]);
 
   const loadSequences = async () => {
+    if (!componentId) {
+      setSequences([]);
+      return;
+    }
+
     const { data } = await supabase
       .from('process_sequences')
       .select('*')
       .eq('configuration_id', configurationId)
+      .eq('component_id', componentId)
       .order('sequence_level')
       .order('order_index');
 
@@ -65,10 +72,16 @@ export default function ProcessFlowChartArea({ configurationId }: ProcessFlowCha
   };
 
   const loadFlowChart = async () => {
+    if (!componentId) {
+      setFlowChartData(null);
+      return;
+    }
+
     const { data } = await supabase
       .from('process_flow_charts')
       .select('*')
       .eq('configuration_id', configurationId)
+      .eq('component_id', componentId)
       .maybeSingle();
 
     if (data) {
@@ -92,6 +105,11 @@ export default function ProcessFlowChartArea({ configurationId }: ProcessFlowCha
   };
 
   const addProcess = async () => {
+    if (!componentId) {
+      alert('请先选择一个组件');
+      return;
+    }
+
     if (!newProcess.name.trim()) {
       alert('请输入工序名称');
       return;
@@ -107,6 +125,7 @@ export default function ProcessFlowChartArea({ configurationId }: ProcessFlowCha
         .from('process_sequences')
         .insert([{
           configuration_id: configurationId,
+          component_id: componentId,
           process_name: newProcess.name,
           sequence_level: newProcess.level,
           work_seconds: newProcess.seconds,
@@ -670,6 +689,7 @@ export default function ProcessFlowChartArea({ configurationId }: ProcessFlowCha
         .from('process_flow_charts')
         .select('id')
         .eq('configuration_id', configurationId)
+        .eq('component_id', componentId)
         .maybeSingle();
 
       const flowData = {
@@ -695,6 +715,7 @@ export default function ProcessFlowChartArea({ configurationId }: ProcessFlowCha
           .from('process_flow_charts')
           .insert([{
             configuration_id: configurationId,
+            component_id: componentId,
             ...flowData
           }]);
       }
@@ -726,10 +747,19 @@ export default function ProcessFlowChartArea({ configurationId }: ProcessFlowCha
     return a.order_index - b.order_index;
   });
 
+  if (!componentId) {
+    return (
+      <div className="text-center py-12 text-gray-500 bg-gray-50 rounded-lg border border-gray-200">
+        <p className="text-lg mb-2">请先选择或添加一个产品组件</p>
+        <p className="text-sm">每个组件可以有独立的工艺序列和流程图</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h3 className="text-xl font-semibold text-gray-800">工艺流程图</h3>
+        <h3 className="text-xl font-semibold text-gray-800">工艺序列表</h3>
         <div className="flex gap-2">
           <button
             onClick={() => setShowAddForm(!showAddForm)}

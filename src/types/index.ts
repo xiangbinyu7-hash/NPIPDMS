@@ -91,3 +91,26 @@ export interface MassProduction {
   created_at: string;
   updated_at: string;
 }
+
+export interface ProductComponent {
+  id: string;
+  configuration_id: string;
+  component_name: string;
+  order_index: number;
+  description: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProcessSequence {
+  id: string;
+  configuration_id: string;
+  component_id: string | null;
+  process_name: string;
+  sequence_level: number;
+  work_hours: number;
+  order_index: number;
+  description: string;
+  created_at: string;
+  updated_at: string;
+}

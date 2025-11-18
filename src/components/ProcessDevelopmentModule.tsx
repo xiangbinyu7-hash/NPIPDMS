@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Settings, Workflow, BarChart3, FileText, Shield, ClipboardCheck, FolderOpen } from 'lucide-react';
 import ProcessFlowChartArea from './ProcessFlowChartArea';
+import ComponentSelector from './ComponentSelector';
 
 interface ProcessDevelopmentModuleProps {
   configurationId: string;
@@ -10,6 +11,7 @@ type SubArea = 'flow' | 'balance' | 'instruction' | 'pfmea' | 'control' | 'attac
 
 export default function ProcessDevelopmentModule({ configurationId }: ProcessDevelopmentModuleProps) {
   const [activeSubArea, setActiveSubArea] = useState<SubArea | null>(null);
+  const [selectedComponentId, setSelectedComponentId] = useState<string | null>(null);
 
   const subAreas = [
     { id: 'flow' as SubArea, name: '工艺流程图', icon: Workflow, color: 'blue' },
@@ -75,9 +77,20 @@ export default function ProcessDevelopmentModule({ configurationId }: ProcessDev
             </h3>
           </div>
 
+          {activeSubArea === 'flow' && (
+            <ComponentSelector
+              configurationId={configurationId}
+              selectedComponentId={selectedComponentId}
+              onSelectComponent={setSelectedComponentId}
+            />
+          )}
+
           <div className="min-h-[400px]">
             {activeSubArea === 'flow' && (
-              <ProcessFlowChartArea configurationId={configurationId} />
+              <ProcessFlowChartArea
+                configurationId={configurationId}
+                componentId={selectedComponentId}
+              />
             )}
             {activeSubArea === 'balance' && (
               <div className="text-center py-12 text-gray-500">
