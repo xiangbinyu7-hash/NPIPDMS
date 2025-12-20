@@ -668,41 +668,41 @@ export default function WorkInstructionModule({ configurationId, componentId }: 
 
           <div className="mb-6 pb-6 border-b border-gray-200">
             <h2 className="text-2xl font-bold text-gray-900 mb-6">基本信息</h2>
-            <div className="grid grid-cols-2 gap-4 mb-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">关联工序 *</label>
-                <select
-                  value={selectedInstruction.process_id || ''}
-                  onChange={(e) => {
-                    const processId = e.target.value;
-                    const process = processes.find(p => p.id === processId);
-                    const newTitle = process ? `${process.process_name} - 标准作业指导书` : '';
-                    setSelectedInstruction({
-                      ...selectedInstruction,
-                      process_id: processId,
-                      title: newTitle
-                    });
-                  }}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="">请选择工序</option>
-                  {processes.map(process => (
-                    <option key={process.id} value={process.id}>
-                      {process.process_name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">作业指导书名称</label>
-                <input
-                  type="text"
-                  value={selectedInstruction.title}
-                  disabled
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-600 cursor-not-allowed"
-                  placeholder="选择工序后自动生成"
-                />
-              </div>
+            <div className="mb-4">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                选择工序 *
+                <span className="text-gray-500 text-xs font-normal ml-2">
+                  （作业指导书名称将自动生成为：工序名 - 标准作业指导书）
+                </span>
+              </label>
+              <select
+                value={selectedInstruction.process_id || ''}
+                onChange={(e) => {
+                  const processId = e.target.value;
+                  const process = processes.find(p => p.id === processId);
+                  const newTitle = process ? `${process.process_name} - 标准作业指导书` : '';
+                  setSelectedInstruction({
+                    ...selectedInstruction,
+                    process_id: processId,
+                    title: newTitle
+                  });
+                }}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="">请选择工序</option>
+                {processes.map(process => (
+                  <option key={process.id} value={process.id}>
+                    {process.process_name} - 标准作业指导书
+                  </option>
+                ))}
+              </select>
+              {selectedInstruction.title && (
+                <div className="mt-2 px-4 py-2 bg-blue-50 border border-blue-200 rounded-lg">
+                  <span className="text-sm text-blue-700">
+                    <span className="font-semibold">当前作业指导书：</span>{selectedInstruction.title}
+                  </span>
+                </div>
+              )}
             </div>
             <div className="grid grid-cols-2 gap-4 mb-4">
               <div>
