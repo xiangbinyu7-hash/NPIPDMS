@@ -55,6 +55,9 @@ interface WorkInstruction {
   status: 'draft' | 'published' | 'archived';
   created_at?: string;
   updated_at?: string;
+  process_name?: string;
+  sequence_level?: number;
+  order_index?: number;
 }
 
 interface WorkInstructionWithSteps extends WorkInstruction {
@@ -114,9 +117,15 @@ export default function WorkInstructionModule({ configurationId, componentId }: 
     try {
       let query = supabase
         .from('work_instructions')
-        .select('*')
-        .eq('configuration_id', configurationId)
-        .order('updated_at', { ascending: false });
+        .select(`
+          *,
+          process_sequences!work_instructions_process_id_fkey (
+            process_name,
+            sequence_level,
+            order_index
+          )
+        `)
+        .eq('configuration_id', configurationId);
 
       if (componentId) {
         query = query.eq('component_id', componentId);
@@ -124,7 +133,22 @@ export default function WorkInstructionModule({ configurationId, componentId }: 
 
       const { data, error } = await query;
       if (error) throw error;
-      setInstructions(data || []);
+
+      const formattedData = (data || []).map((item: any) => ({
+        ...item,
+        process_name: item.process_sequences?.process_name,
+        sequence_level: item.process_sequences?.sequence_level ?? 9999,
+        order_index: item.process_sequences?.order_index ?? 9999
+      }));
+
+      formattedData.sort((a, b) => {
+        if (a.sequence_level !== b.sequence_level) {
+          return a.sequence_level - b.sequence_level;
+        }
+        return a.order_index - b.order_index;
+      });
+
+      setInstructions(formattedData);
     } catch (error) {
       console.error('加载作业指导书失败:', error);
     } finally {
@@ -1079,6 +1103,14 @@ export default function WorkInstructionModule({ configurationId, componentId }: 
                   </div>
                   {getStatusBadge(instruction.status)}
                 </div>
+
+                {instruction.process_name && (
+                  <div className="mb-2">
+                    <span className="inline-flex items-center px-2 py-1 rounded-md bg-blue-50 text-blue-700 text-xs font-medium border border-blue-200">
+                      {instruction.process_name}
+                    </span>
+                  </div>
+                )}
 
                 <h3 className="text-lg font-semibold text-gray-900 mb-2 line-clamp-1">
                   {instruction.title}
