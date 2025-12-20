@@ -6,6 +6,12 @@ export default defineConfig({
   plugins: [react()],
   optimizeDeps: {
     exclude: ['lucide-react'],
+    include: ['xlsx'],
+  },
+  build: {
+    commonjsOptions: {
+      include: [/xlsx/, /node_modules/],
+    },
   },
   server: {
     historyApiFallback: true,
