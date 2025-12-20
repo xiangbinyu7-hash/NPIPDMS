@@ -353,7 +353,22 @@ export default function LineBalancingArea({ configurationId, componentId }: Line
     }
 
     if (finalStations.length === 0) {
-      alert('无法在给定约束下生成有效方案，请调整参数。建议：\n1. 增加工位数\n2. 或点击"生成流程图"使用自动优化');
+      const minStationsNeeded = Math.ceil(totalSeconds / maxProcess.work_seconds);
+      let errorMsg = '无法在给定约束下生成有效方案。';
+
+      if (targetStations && targetStations < minStationsNeeded) {
+        errorMsg += `\n\n分析：根据总工时 ${totalSeconds.toFixed(0)}秒 和瓶颈工序 ${maxProcess.work_seconds.toFixed(0)}秒，`;
+        errorMsg += `\n至少需要 ${minStationsNeeded} 个工位才能完成分配。`;
+        errorMsg += `\n\n建议：`;
+        errorMsg += `\n1. 增加工位数至 ${minStationsNeeded} 个或更多`;
+        errorMsg += `\n2. 点击"生成流程图"使用自动优化`;
+      } else {
+        errorMsg += '\n\n建议：';
+        errorMsg += '\n1. 增加工位数';
+        errorMsg += '\n2. 点击"生成流程图"使用自动优化';
+      }
+
+      alert(errorMsg);
       return;
     }
 
@@ -438,6 +453,14 @@ export default function LineBalancingArea({ configurationId, componentId }: Line
     const otherProcesses = processes.filter(p => p.id !== bottleneckProcess.id);
     const n = otherProcesses.length;
 
+    const totalSeconds = processes.reduce((sum, p) => sum + p.work_seconds, 0);
+    const avgTimePerStation = totalSeconds / targetCount;
+
+    console.log(`固定工位分配: ${targetCount}个工位`);
+    console.log(`总工时: ${totalSeconds.toFixed(2)}秒, 平均每工位: ${avgTimePerStation.toFixed(2)}秒`);
+    console.log(`节拍时间限制: ${taktTime.toFixed(2)}秒`);
+    console.log(`瓶颈工序: ${bottleneckProcess.work_seconds.toFixed(2)}秒`);
+
     if (n === 0) {
       if (targetCount === 1) {
         return [{
@@ -449,9 +472,14 @@ export default function LineBalancingArea({ configurationId, componentId }: Line
       return [];
     }
 
-    let allSolutions: { stations: WorkStation[], variance: number, balanceRate: number }[] = [];
+    const isMinimalStations = targetCount <= 2;
+    let allSolutions: { stations: WorkStation[], variance: number, balanceRate: number, maxTime: number }[] = [];
 
     function validateLevelOrder(stations: WorkStation[]): boolean {
+      if (isMinimalStations) {
+        return true;
+      }
+
       for (let i = 0; i < stations.length - 1; i++) {
         if (stations[i].processes.length === 0 || stations[i + 1].processes.length === 0) continue;
         const currentMaxLevel = Math.max(...stations[i].processes.map(p => p.sequence_level));
@@ -531,7 +559,8 @@ export default function LineBalancingArea({ configurationId, componentId }: Line
         allSolutions.push({
           stations: fullStations,
           variance: variance,
-          balanceRate: balanceRate
+          balanceRate: balanceRate,
+          maxTime: maxWorkload
         });
 
         return;
@@ -547,17 +576,20 @@ export default function LineBalancingArea({ configurationId, componentId }: Line
 
         if (newTotal <= taktTime) {
           let canAdd = true;
-          if (station.processes.length > 0) {
-            const stationMaxLevel = Math.max(...station.processes.map(p => p.sequence_level));
-            if (currentLevel < stationMaxLevel) {
-              canAdd = false;
-            }
-          }
 
-          if (i < currentStations.length - 1 && currentStations[i + 1].processes.length > 0) {
-            const nextMinLevel = Math.min(...currentStations[i + 1].processes.map(p => p.sequence_level));
-            if (currentLevel > nextMinLevel) {
-              canAdd = false;
+          if (!isMinimalStations) {
+            if (station.processes.length > 0) {
+              const stationMaxLevel = Math.max(...station.processes.map(p => p.sequence_level));
+              if (currentLevel < stationMaxLevel) {
+                canAdd = false;
+              }
+            }
+
+            if (i < currentStations.length - 1 && currentStations[i + 1].processes.length > 0) {
+              const nextMinLevel = Math.min(...currentStations[i + 1].processes.map(p => p.sequence_level));
+              if (currentLevel > nextMinLevel) {
+                canAdd = false;
+              }
             }
           }
 
@@ -581,10 +613,19 @@ export default function LineBalancingArea({ configurationId, componentId }: Line
 
     if (allSolutions.length === 0) {
       console.log('未找到满足条件的方案');
+      console.log(`可能原因: 节拍时间 ${taktTime.toFixed(2)}秒 太小，无法容纳所有工序`);
+      console.log(`建议: 平均每工位需要 ${avgTimePerStation.toFixed(2)}秒`);
       return [];
     }
 
     allSolutions.sort((a, b) => {
+      if (isMinimalStations) {
+        const timeDiff = a.maxTime - b.maxTime;
+        if (Math.abs(timeDiff) > 1) {
+          return timeDiff;
+        }
+      }
+
       const balanceDiff = b.balanceRate - a.balanceRate;
       if (Math.abs(balanceDiff) > 0.1) {
         return balanceDiff;
@@ -592,7 +633,8 @@ export default function LineBalancingArea({ configurationId, componentId }: Line
       return a.variance - b.variance;
     });
 
-    console.log(`找到 ${allSolutions.length} 个方案，最优平衡率: ${allSolutions[0].balanceRate.toFixed(2)}%`);
+    console.log(`找到 ${allSolutions.length} 个方案`);
+    console.log(`最优方案 - 平衡率: ${allSolutions[0].balanceRate.toFixed(2)}%, 最大工位时间: ${allSolutions[0].maxTime.toFixed(2)}秒`);
     return allSolutions[0].stations;
   };
 
