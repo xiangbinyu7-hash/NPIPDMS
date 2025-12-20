@@ -16,6 +16,7 @@ interface WorkStation {
   id: number;
   processes: ProcessSequence[];
   totalSeconds: number;
+  processWorkerCounts?: { [processId: string]: number };
 }
 
 interface LineBalancingAreaProps {
@@ -436,10 +437,70 @@ export default function LineBalancingArea({ configurationId, componentId }: Line
     const otherProcesses = sortedSequences.filter(p => p.id !== bottleneckProcess.id);
 
     if (targetStationCount) {
+      if (targetStationCount > sortedSequences.length) {
+        return distributeWithExtraWorkers(sortedSequences, targetStationCount);
+      }
       return distributeWithFixedStations(sortedSequences, bottleneckProcess, taktTime, targetStationCount);
     } else {
       return findOptimalStationsWithTakt(sortedSequences, bottleneckProcess, taktTime);
     }
+  };
+
+  const distributeWithExtraWorkers = (
+    processes: ProcessSequence[],
+    targetWorkerCount: number
+  ): WorkStation[] => {
+    const processCount = processes.length;
+    const extraWorkers = targetWorkerCount - processCount;
+
+    console.log(`工位数(${targetWorkerCount}) > 工序数(${processCount}), 多余工人: ${extraWorkers}`);
+
+    const workerAssignment = new Array(processCount).fill(1);
+
+    for (let i = 0; i < extraWorkers; i++) {
+      let bestProcessIndex = 0;
+      let maxTime = 0;
+
+      for (let j = 0; j < processCount; j++) {
+        const effectiveTime = processes[j].work_seconds / workerAssignment[j];
+        if (effectiveTime > maxTime) {
+          maxTime = effectiveTime;
+          bestProcessIndex = j;
+        }
+      }
+
+      workerAssignment[bestProcessIndex]++;
+    }
+
+    const stations: WorkStation[] = [];
+    let stationId = 1;
+
+    for (let i = 0; i < processCount; i++) {
+      const process = processes[i];
+      const workers = workerAssignment[i];
+      const effectiveTime = process.work_seconds / workers;
+
+      for (let w = 0; w < workers; w++) {
+        const workerCounts: { [key: string]: number } = {};
+        workerCounts[process.id] = workers;
+
+        stations.push({
+          id: stationId++,
+          processes: [process],
+          totalSeconds: effectiveTime,
+          processWorkerCounts: workerCounts
+        });
+      }
+    }
+
+    const totalSeconds = processes.reduce((sum, p) => sum + p.work_seconds, 0);
+    const maxStationTime = Math.max(...stations.map(s => s.totalSeconds));
+    const balanceRate = (totalSeconds / (targetWorkerCount * maxStationTime)) * 100;
+
+    console.log(`分配完成: ${targetWorkerCount}个工人, 最大工位时间: ${maxStationTime.toFixed(2)}秒, 平衡率: ${balanceRate.toFixed(2)}%`);
+    console.log('工人分配:', workerAssignment);
+
+    return stations;
   };
 
   const distributeWithFixedStations = (
@@ -1781,18 +1842,39 @@ export default function LineBalancingArea({ configurationId, componentId }: Line
                       </div>
                     </div>
                     <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
-                      {station.processes.map((process) => (
-                        <div
-                          key={process.id}
-                          className="bg-green-50 border border-green-200 rounded p-2"
-                        >
-                          <div className="flex items-start justify-between mb-0.5">
-                            <span className="text-xs font-semibold text-green-700">L{process.sequence_level}</span>
-                            <span className="text-xs text-green-600">{process.work_seconds}s</span>
+                      {station.processes.map((process) => {
+                        const workerCount = station.processWorkerCounts?.[process.id] || 1;
+                        const effectiveTime = workerCount > 1 ? (process.work_seconds / workerCount) : process.work_seconds;
+
+                        return (
+                          <div
+                            key={process.id}
+                            className={`border rounded p-2 ${
+                              workerCount > 1
+                                ? 'bg-blue-50 border-blue-300 ring-2 ring-blue-200'
+                                : 'bg-green-50 border-green-200'
+                            }`}
+                          >
+                            <div className="flex items-start justify-between mb-0.5">
+                              <span className="text-xs font-semibold text-green-700">L{process.sequence_level}</span>
+                              <span className={`text-xs font-medium ${workerCount > 1 ? 'text-blue-700' : 'text-green-600'}`}>
+                                {effectiveTime.toFixed(1)}s
+                              </span>
+                            </div>
+                            <p className="text-xs font-medium text-gray-800 leading-tight">
+                              {process.process_name}
+                              {workerCount > 1 && (
+                                <span className="ml-1 text-blue-700 font-bold">({workerCount}人)</span>
+                              )}
+                            </p>
+                            {workerCount > 1 && (
+                              <p className="text-[10px] text-blue-600 mt-1">
+                                原工时: {process.work_seconds}s
+                              </p>
+                            )}
                           </div>
-                          <p className="text-xs font-medium text-gray-800 leading-tight">{process.process_name}</p>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 );

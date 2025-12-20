@@ -21,10 +21,12 @@ interface ProcessFlowLayoutEditorProps {
   workStations: Array<{
     id: number;
     processes: Array<{
+      id?: string;
       process_name: string;
       work_seconds: number;
     }>;
     totalSeconds: number;
+    processWorkerCounts?: { [processId: string]: number };
   }>;
   componentId: string;
   onSave?: (nodes: FlowNode[], connections: FlowConnection[]) => void;
@@ -78,14 +80,25 @@ export default function ProcessFlowLayoutEditor({
 
     workStations.forEach((station, index) => {
       const nodeId = `station-${station.id}`;
-      const processNames = station.processes.map(p => p.process_name).join('\n');
+
+      let processInfo = station.processes.map(p => {
+        const workerCount = station.processWorkerCounts && p.id
+          ? station.processWorkerCounts[p.id]
+          : 1;
+
+        if (workerCount > 1) {
+          return `${p.process_name} (${workerCount}人)`;
+        }
+        return p.process_name;
+      }).join('\n');
+
       const workTime = `${(station.totalSeconds / 3600).toFixed(2)}h`;
 
       newNodes.push({
         id: nodeId,
         type: 'process',
         label: `工位${station.id}`,
-        subtitle: `${processNames}\n工时: ${workTime}`,
+        subtitle: `${processInfo}\n工时: ${workTime}`,
         x: currentX,
         y: startY - 10,
         width: processWidth,
