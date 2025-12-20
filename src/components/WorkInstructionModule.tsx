@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import {
   Plus, Trash2, Video, AlertCircle, Save, Clock, Wrench, CheckCircle,
-  Eye, Edit, FileText, Search, ArrowLeft, Share2, Copy, ExternalLink
+  Eye, Edit, FileText, Search, ArrowLeft, Share2, Copy, ExternalLink, Download
 } from 'lucide-react';
+import { exportWorkInstructionToExcel, exportMultipleWorkInstructionsToExcel } from '../lib/excelExport';
 
 interface Process {
   id: string;
@@ -480,6 +481,13 @@ export default function WorkInstructionModule({ configurationId, componentId }: 
             </button>
             <div className="flex gap-2">
               <button
+                onClick={() => exportWorkInstructionToExcel(selectedInstruction)}
+                className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors"
+              >
+                <Download className="w-4 h-4" />
+                导出
+              </button>
+              <button
                 onClick={() => handleShare(selectedInstruction)}
                 className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
               >
@@ -670,19 +678,19 @@ export default function WorkInstructionModule({ configurationId, componentId }: 
             <h2 className="text-2xl font-bold text-gray-900 mb-6">基本信息</h2>
             <div className="grid grid-cols-2 gap-4 mb-4">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">标题</label>
-                <input
-                  type="text"
-                  value={selectedInstruction.title}
-                  onChange={(e) => setSelectedInstruction({ ...selectedInstruction, title: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">关联工序</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">关联工序 *</label>
                 <select
                   value={selectedInstruction.process_id || ''}
-                  onChange={(e) => setSelectedInstruction({ ...selectedInstruction, process_id: e.target.value })}
+                  onChange={(e) => {
+                    const processId = e.target.value;
+                    const process = processes.find(p => p.id === processId);
+                    const newTitle = process ? `${process.process_name} - 标准作业指导书` : '';
+                    setSelectedInstruction({
+                      ...selectedInstruction,
+                      process_id: processId,
+                      title: newTitle
+                    });
+                  }}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
                   <option value="">请选择工序</option>
@@ -692,6 +700,16 @@ export default function WorkInstructionModule({ configurationId, componentId }: 
                     </option>
                   ))}
                 </select>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">作业指导书名称</label>
+                <input
+                  type="text"
+                  value={selectedInstruction.title}
+                  disabled
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-600 cursor-not-allowed"
+                  placeholder="选择工序后自动生成"
+                />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4 mb-4">
@@ -1051,13 +1069,36 @@ export default function WorkInstructionModule({ configurationId, componentId }: 
             </h2>
             <p className="text-gray-600 mt-1">管理产线标准操作规范，确保生产一致性与安全性</p>
           </div>
-          <button
-            onClick={createNewInstruction}
-            className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
-          >
-            <Plus className="w-5 h-5" />
-            创建新 SOP
-          </button>
+          <div className="flex gap-3">
+            {filteredInstructions.length > 0 && (
+              <button
+                onClick={async () => {
+                  const instructionsWithSteps = await Promise.all(
+                    filteredInstructions.map(async (instruction) => {
+                      const { data: stepsData } = await supabase
+                        .from('work_instruction_steps')
+                        .select('*')
+                        .eq('instruction_id', instruction.id!)
+                        .order('step_number', { ascending: true });
+                      return { ...instruction, steps: stepsData || [] };
+                    })
+                  );
+                  exportMultipleWorkInstructionsToExcel(instructionsWithSteps);
+                }}
+                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors shadow-sm"
+              >
+                <Download className="w-5 h-5" />
+                批量导出
+              </button>
+            )}
+            <button
+              onClick={createNewInstruction}
+              className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
+            >
+              <Plus className="w-5 h-5" />
+              创建新 SOP
+            </button>
+          </div>
         </div>
 
         <div className="mb-6 flex gap-4">
@@ -1125,35 +1166,53 @@ export default function WorkInstructionModule({ configurationId, componentId }: 
                   <span>{formatDate(instruction.updated_at)}</span>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    onClick={() => handleViewDetail(instruction)}
-                    className="flex items-center justify-center gap-1 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm"
-                  >
-                    <Eye className="w-4 h-4" />
-                    查看
-                  </button>
-                  <button
-                    onClick={() => handleShare(instruction)}
-                    className="flex items-center justify-center gap-1 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm"
-                  >
-                    <Share2 className="w-4 h-4" />
-                    分享
-                  </button>
-                  <button
-                    onClick={() => handleEdit(instruction)}
-                    className="flex items-center justify-center gap-1 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
-                  >
-                    <Edit className="w-4 h-4" />
-                    编辑
-                  </button>
-                  <button
-                    onClick={() => handleDelete(instruction.id!)}
-                    className="flex items-center justify-center gap-1 px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    删除
-                  </button>
+                <div className="space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => handleViewDetail(instruction)}
+                      className="flex items-center justify-center gap-1 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm"
+                    >
+                      <Eye className="w-4 h-4" />
+                      查看
+                    </button>
+                    <button
+                      onClick={async () => {
+                        const { data: stepsData } = await supabase
+                          .from('work_instruction_steps')
+                          .select('*')
+                          .eq('instruction_id', instruction.id!)
+                          .order('step_number', { ascending: true });
+                        exportWorkInstructionToExcel({ ...instruction, steps: stepsData || [] });
+                      }}
+                      className="flex items-center justify-center gap-1 px-3 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-sm"
+                    >
+                      <Download className="w-4 h-4" />
+                      导出
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      onClick={() => handleShare(instruction)}
+                      className="flex items-center justify-center gap-1 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm"
+                    >
+                      <Share2 className="w-4 h-4" />
+                      分享
+                    </button>
+                    <button
+                      onClick={() => handleEdit(instruction)}
+                      className="flex items-center justify-center gap-1 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
+                    >
+                      <Edit className="w-4 h-4" />
+                      编辑
+                    </button>
+                    <button
+                      onClick={() => handleDelete(instruction.id!)}
+                      className="flex items-center justify-center gap-1 px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      删除
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}
