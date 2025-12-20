@@ -4,6 +4,7 @@ import ProcessFlowChartArea from './ProcessFlowChartArea';
 import LineBalancingArea from './LineBalancingArea';
 import ComponentSelector from './ComponentSelector';
 import WorkInstructionModule from './WorkInstructionModule';
+import PFMEAModule from './PFMEAModule';
 
 interface ProcessDevelopmentModuleProps {
   configurationId: string;
@@ -103,6 +104,14 @@ export default function ProcessDevelopmentModule({ configurationId }: ProcessDev
             />
           )}
 
+          {activeSubArea === 'pfmea' && (
+            <ComponentSelector
+              configurationId={configurationId}
+              selectedComponentId={selectedComponentId}
+              onSelectComponent={setSelectedComponentId}
+            />
+          )}
+
           <div className="min-h-[400px]">
             {activeSubArea === 'flow' && (
               <ProcessFlowChartArea
@@ -123,9 +132,10 @@ export default function ProcessDevelopmentModule({ configurationId }: ProcessDev
               />
             )}
             {activeSubArea === 'pfmea' && (
-              <div className="text-center py-12 text-gray-500">
-                PFMEA功能开发中...
-              </div>
+              <PFMEAModule
+                configurationId={configurationId}
+                componentId={selectedComponentId || undefined}
+              />
             )}
             {activeSubArea === 'control' && (
               <div className="text-center py-12 text-gray-500">
