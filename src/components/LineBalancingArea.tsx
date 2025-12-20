@@ -1820,65 +1820,158 @@ export default function LineBalancingArea({ configurationId, componentId }: Line
 
           <div>
             <h5 className="font-semibold text-gray-800 mb-3 text-lg">各工位详细分配</h5>
-            <div className="space-y-2 max-h-96 overflow-y-auto">
-              {workStations.map((station) => {
-                const stationSeconds = station.totalSeconds;
-                const balancePercentage = (station.totalSeconds / (flowChartData.flowChartData?.maxStationSeconds || 1)) * 100;
-                return (
-                  <div key={station.id} className="bg-white rounded-lg border border-green-200 p-3 hover:shadow-md transition-shadow">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-base font-bold text-green-700">工位 {station.id}</span>
-                      <div className="flex items-center gap-2">
-                        <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs font-medium">
-                          {stationSeconds.toFixed(0)}秒
-                        </span>
-                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                          balancePercentage >= 90 ? 'bg-green-100 text-green-700' :
-                          balancePercentage >= 80 ? 'bg-yellow-100 text-yellow-700' :
-                          'bg-orange-100 text-orange-700'
-                        }`}>
-                          {balancePercentage.toFixed(1)}%
-                        </span>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
-                      {station.processes.map((process) => {
-                        const workerCount = station.processWorkerCounts?.[process.id] || 1;
-                        const effectiveTime = workerCount > 1 ? (process.work_seconds / workerCount) : process.work_seconds;
+            <div className="space-y-4 max-h-96 overflow-y-auto">
+              {(() => {
+                const groupedStations: { [key: string]: typeof workStations } = {};
 
-                        return (
-                          <div
-                            key={process.id}
-                            className={`border rounded p-2 ${
-                              workerCount > 1
-                                ? 'bg-blue-50 border-blue-300 ring-2 ring-blue-200'
-                                : 'bg-green-50 border-green-200'
-                            }`}
-                          >
-                            <div className="flex items-start justify-between mb-0.5">
-                              <span className="text-xs font-semibold text-green-700">L{process.sequence_level}</span>
-                              <span className={`text-xs font-medium ${workerCount > 1 ? 'text-blue-700' : 'text-green-600'}`}>
-                                {effectiveTime.toFixed(1)}s
-                              </span>
+                workStations.forEach(station => {
+                  const process = station.processes[0];
+                  const workerCount = station.processWorkerCounts?.[process.id] || 1;
+
+                  if (workerCount > 1) {
+                    const groupKey = `${process.id}-${process.process_name}`;
+                    if (!groupedStations[groupKey]) {
+                      groupedStations[groupKey] = [];
+                    }
+                    groupedStations[groupKey].push(station);
+                  } else {
+                    groupedStations[`single-${station.id}`] = [station];
+                  }
+                });
+
+                return Object.entries(groupedStations).map(([groupKey, stations]) => {
+                  const isParallel = stations.length > 1;
+                  const firstStation = stations[0];
+                  const process = firstStation.processes[0];
+                  const workerCount = firstStation.processWorkerCounts?.[process.id] || 1;
+
+                  if (isParallel) {
+                    return (
+                      <div
+                        key={groupKey}
+                        className="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-lg border-2 border-blue-400 p-4 shadow-lg"
+                      >
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-sm">
+                              ⚡
                             </div>
-                            <p className="text-xs font-medium text-gray-800 leading-tight">
-                              {process.process_name}
-                              {workerCount > 1 && (
-                                <span className="ml-1 text-blue-700 font-bold">({workerCount}人)</span>
-                              )}
-                            </p>
-                            {workerCount > 1 && (
-                              <p className="text-[10px] text-blue-600 mt-1">
-                                原工时: {process.work_seconds}s
+                            <div>
+                              <h6 className="font-bold text-blue-900 text-base">
+                                {process.process_name} - 并行作业
+                              </h6>
+                              <p className="text-xs text-blue-700">
+                                {stations.length} 个工位同时执行 · 共 {workerCount} 人协作
                               </p>
-                            )}
+                            </div>
                           </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
+                          <div className="bg-blue-100 px-3 py-1 rounded-full">
+                            <span className="text-sm font-bold text-blue-800">
+                              实际节拍: {firstStation.totalSeconds.toFixed(1)}秒
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                          {stations.map((station) => {
+                            const stationSeconds = station.totalSeconds;
+                            const balancePercentage = (station.totalSeconds / (flowChartData.flowChartData?.maxStationSeconds || 1)) * 100;
+
+                            return (
+                              <div
+                                key={station.id}
+                                className="bg-white rounded-lg border-2 border-blue-300 p-3 hover:shadow-md transition-all hover:scale-105"
+                              >
+                                <div className="flex items-center justify-between mb-2">
+                                  <span className="text-sm font-bold text-blue-700">工位 {station.id}</span>
+                                  <div className="flex flex-col items-end gap-1">
+                                    <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium">
+                                      {stationSeconds.toFixed(0)}秒
+                                    </span>
+                                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                                      balancePercentage >= 90 ? 'bg-green-100 text-green-700' :
+                                      balancePercentage >= 80 ? 'bg-yellow-100 text-yellow-700' :
+                                      'bg-orange-100 text-orange-700'
+                                    }`}>
+                                      {balancePercentage.toFixed(1)}%
+                                    </span>
+                                  </div>
+                                </div>
+
+                                <div className="space-y-2">
+                                  {station.processes.map((proc) => {
+                                    const effectiveTime = workerCount > 1 ? (proc.work_seconds / workerCount) : proc.work_seconds;
+
+                                    return (
+                                      <div
+                                        key={proc.id}
+                                        className="bg-blue-50 border border-blue-200 rounded p-2"
+                                      >
+                                        <div className="flex items-start justify-between mb-0.5">
+                                          <span className="text-xs font-semibold text-blue-700">L{proc.sequence_level}</span>
+                                          <span className="text-xs font-medium text-blue-700">
+                                            {effectiveTime.toFixed(1)}s
+                                          </span>
+                                        </div>
+                                        <p className="text-xs font-medium text-gray-800">{proc.process_name}</p>
+                                        <p className="text-[10px] text-blue-600 mt-1">
+                                          原工时: {proc.work_seconds}s
+                                        </p>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  } else {
+                    const station = stations[0];
+                    const stationSeconds = station.totalSeconds;
+                    const balancePercentage = (station.totalSeconds / (flowChartData.flowChartData?.maxStationSeconds || 1)) * 100;
+
+                    return (
+                      <div key={station.id} className="bg-white rounded-lg border border-green-200 p-3 hover:shadow-md transition-shadow">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-base font-bold text-green-700">工位 {station.id}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs font-medium">
+                              {stationSeconds.toFixed(0)}秒
+                            </span>
+                            <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                              balancePercentage >= 90 ? 'bg-green-100 text-green-700' :
+                              balancePercentage >= 80 ? 'bg-yellow-100 text-yellow-700' :
+                              'bg-orange-100 text-orange-700'
+                            }`}>
+                              {balancePercentage.toFixed(1)}%
+                            </span>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
+                          {station.processes.map((process) => {
+                            return (
+                              <div
+                                key={process.id}
+                                className="bg-green-50 border border-green-200 rounded p-2"
+                              >
+                                <div className="flex items-start justify-between mb-0.5">
+                                  <span className="text-xs font-semibold text-green-700">L{process.sequence_level}</span>
+                                  <span className="text-xs font-medium text-green-600">
+                                    {process.work_seconds.toFixed(1)}s
+                                  </span>
+                                </div>
+                                <p className="text-xs font-medium text-gray-800 leading-tight">{process.process_name}</p>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  }
+                });
+              })()}
             </div>
           </div>
           </div>

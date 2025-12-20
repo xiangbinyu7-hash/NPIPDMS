@@ -59,8 +59,9 @@ export default function ProcessFlowLayoutEditor({
     const newNodes: FlowNode[] = [];
     const newConnections: FlowConnection[] = [];
 
-    const startY = 100;
-    const spacing = 200;
+    const startY = 200;
+    const horizontalSpacing = 250;
+    const verticalSpacing = 120;
     const processWidth = 160;
     const processHeight = 80;
     const terminalWidth = 120;
@@ -76,42 +77,112 @@ export default function ProcessFlowLayoutEditor({
       height: terminalHeight
     });
 
-    let currentX = 50 + terminalWidth + spacing;
+    const groupedStations: { [key: string]: typeof workStations } = {};
+    const stationGroups: Array<typeof workStations> = [];
 
-    workStations.forEach((station, index) => {
-      const nodeId = `station-${station.id}`;
+    workStations.forEach(station => {
+      const process = station.processes[0];
+      const workerCount = station.processWorkerCounts?.[process.id] || 1;
 
-      let processInfo = station.processes.map(p => {
-        const workerCount = station.processWorkerCounts && p.id
-          ? station.processWorkerCounts[p.id]
-          : 1;
-
-        if (workerCount > 1) {
-          return `${p.process_name} (${workerCount}人)`;
+      if (workerCount > 1) {
+        const groupKey = `${process.id}-${process.process_name}`;
+        if (!groupedStations[groupKey]) {
+          groupedStations[groupKey] = [];
+          stationGroups.push(groupedStations[groupKey]);
         }
-        return p.process_name;
-      }).join('\n');
-
-      const workTime = `${(station.totalSeconds / 3600).toFixed(2)}h`;
-
-      newNodes.push({
-        id: nodeId,
-        type: 'process',
-        label: `工位${station.id}`,
-        subtitle: `${processInfo}\n工时: ${workTime}`,
-        x: currentX,
-        y: startY - 10,
-        width: processWidth,
-        height: processHeight
-      });
-
-      if (index === 0) {
-        newConnections.push({ from: 'start', to: nodeId });
+        groupedStations[groupKey].push(station);
       } else {
-        newConnections.push({ from: `station-${workStations[index - 1].id}`, to: nodeId });
+        const singleGroup = [station];
+        stationGroups.push(singleGroup);
+      }
+    });
+
+    let currentX = 50 + terminalWidth + horizontalSpacing;
+    let previousGroupNodes: string[] = [];
+
+    stationGroups.forEach((group, groupIndex) => {
+      const isParallel = group.length > 1;
+      const currentGroupNodes: string[] = [];
+
+      if (isParallel) {
+        const totalHeight = group.length * processHeight + (group.length - 1) * 40;
+        const startYForGroup = startY - totalHeight / 2 + processHeight / 2;
+
+        group.forEach((station, stationIndexInGroup) => {
+          const nodeId = `station-${station.id}`;
+          const process = station.processes[0];
+          const workerCount = station.processWorkerCounts?.[process.id] || 1;
+
+          let processInfo = station.processes.map(p => {
+            if (workerCount > 1) {
+              return `${p.process_name} (${workerCount}人)`;
+            }
+            return p.process_name;
+          }).join('\n');
+
+          const workTime = `${(station.totalSeconds / 3600).toFixed(2)}h`;
+          const yPos = startYForGroup + stationIndexInGroup * (processHeight + 40);
+
+          newNodes.push({
+            id: nodeId,
+            type: 'process',
+            label: `工位${station.id}`,
+            subtitle: `${processInfo}\n工时: ${workTime}`,
+            x: currentX,
+            y: yPos,
+            width: processWidth,
+            height: processHeight
+          });
+
+          currentGroupNodes.push(nodeId);
+
+          if (groupIndex === 0) {
+            newConnections.push({ from: 'start', to: nodeId });
+          } else {
+            previousGroupNodes.forEach(prevNodeId => {
+              newConnections.push({ from: prevNodeId, to: nodeId });
+            });
+          }
+        });
+      } else {
+        const station = group[0];
+        const nodeId = `station-${station.id}`;
+        const process = station.processes[0];
+        const workerCount = station.processWorkerCounts?.[process.id] || 1;
+
+        let processInfo = station.processes.map(p => {
+          if (workerCount > 1) {
+            return `${p.process_name} (${workerCount}人)`;
+          }
+          return p.process_name;
+        }).join('\n');
+
+        const workTime = `${(station.totalSeconds / 3600).toFixed(2)}h`;
+
+        newNodes.push({
+          id: nodeId,
+          type: 'process',
+          label: `工位${station.id}`,
+          subtitle: `${processInfo}\n工时: ${workTime}`,
+          x: currentX,
+          y: startY - 10,
+          width: processWidth,
+          height: processHeight
+        });
+
+        currentGroupNodes.push(nodeId);
+
+        if (groupIndex === 0) {
+          newConnections.push({ from: 'start', to: nodeId });
+        } else {
+          previousGroupNodes.forEach(prevNodeId => {
+            newConnections.push({ from: prevNodeId, to: nodeId });
+          });
+        }
       }
 
-      currentX += processWidth + spacing;
+      previousGroupNodes = currentGroupNodes;
+      currentX += processWidth + horizontalSpacing;
     });
 
     const endId = 'end';
@@ -125,10 +196,9 @@ export default function ProcessFlowLayoutEditor({
       height: terminalHeight
     });
 
-    if (workStations.length > 0) {
-      newConnections.push({
-        from: `station-${workStations[workStations.length - 1].id}`,
-        to: endId
+    if (previousGroupNodes.length > 0) {
+      previousGroupNodes.forEach(nodeId => {
+        newConnections.push({ from: nodeId, to: endId });
       });
     }
 
@@ -288,12 +358,16 @@ export default function ProcessFlowLayoutEditor({
     const isTerminal = node.type === 'start' || node.type === 'end';
     const isConnectFrom = connectFromId === node.id;
 
+    const isParallelNode = node.subtitle && node.subtitle.includes('人)');
+
     return (
       <div
         key={node.id}
         className={`absolute ${isConnecting ? 'cursor-crosshair' : 'cursor-move'} ${
           isSelected ? 'ring-2 ring-blue-500' : ''
-        } ${isConnectFrom ? 'ring-4 ring-green-500' : ''}`}
+        } ${isConnectFrom ? 'ring-4 ring-green-500' : ''} ${
+          isParallelNode ? 'ring-2 ring-cyan-400' : ''
+        }`}
         style={{
           left: node.x,
           top: node.y,
@@ -322,6 +396,8 @@ export default function ProcessFlowLayoutEditor({
           className={`w-full h-full flex flex-col items-center justify-center border-2 shadow-lg transition-all ${
             isTerminal
               ? 'rounded-full bg-white border-gray-400'
+              : isParallelNode
+              ? 'rounded-lg bg-gradient-to-br from-cyan-50 to-blue-50 border-cyan-500 border-2'
               : 'rounded-lg bg-blue-50 border-blue-400'
           } ${isSelected ? 'shadow-xl scale-105' : ''} ${
             isConnectFrom ? 'border-green-500 bg-green-50' : ''
