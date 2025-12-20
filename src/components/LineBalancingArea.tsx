@@ -47,6 +47,10 @@ export default function LineBalancingArea({ configurationId, componentId }: Line
       maxStationSeconds: number;
     };
   } | null>(null);
+  const [manualStationCount, setManualStationCount] = useState<number | null>(null);
+  const [manualTaktTime, setManualTaktTime] = useState<number | null>(null);
+  const [isEditingStationCount, setIsEditingStationCount] = useState(false);
+  const [isEditingTaktTime, setIsEditingTaktTime] = useState(false);
 
   useEffect(() => {
     console.log('Component changed, componentId:', componentId);
@@ -275,6 +279,334 @@ export default function LineBalancingArea({ configurationId, componentId }: Line
     } finally {
       setLoading(false);
     }
+  };
+
+  const recalculateWithManualParams = async () => {
+    if (!manualStationCount && !manualTaktTime) {
+      alert('请输入工位数或节拍时间');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await generateFlowChartWithParams(manualStationCount, manualTaktTime);
+      setIsEditingStationCount(false);
+      setIsEditingTaktTime(false);
+    } catch (error) {
+      console.error('重新计算失败:', error);
+      alert('重新计算失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const generateFlowChartWithParams = async (targetStations: number | null = null, targetTaktTime: number | null = null) => {
+    const sortedSequences = [...sequences].sort((a, b) => {
+      if (a.sequence_level !== b.sequence_level) {
+        return a.sequence_level - b.sequence_level;
+      }
+      return a.order_index - b.order_index;
+    });
+
+    const totalSeconds = sequences.reduce((sum, s) => sum + s.work_seconds, 0);
+    const maxProcess = sequences.reduce((max, seq) =>
+      seq.work_seconds > max.work_seconds ? seq : max
+    , sequences[0]);
+
+    let taktTimeConstraint = targetTaktTime || maxProcess.work_seconds;
+
+    console.log('手动参数:', { targetStations, targetTaktTime });
+    console.log('约束条件:', { taktTimeConstraint });
+
+    const finalStations = distributeProcessesToStations(
+      sortedSequences,
+      maxProcess,
+      taktTimeConstraint,
+      targetStations
+    );
+
+    if (finalStations.length === 0) {
+      alert('无法在给定约束下生成有效方案，请调整参数');
+      return;
+    }
+
+    const maxStationSeconds = Math.max(...finalStations.map(s => s.totalSeconds));
+    const actualTaktTime = maxStationSeconds;
+    const balanceRate = (totalSeconds / (finalStations.length * maxStationSeconds)) * 100;
+
+    const { data: existing } = await supabase
+      .from('process_flow_charts')
+      .select('id')
+      .eq('configuration_id', configurationId)
+      .eq('component_id', componentId)
+      .maybeSingle();
+
+    const flowData = {
+      total_workers: finalStations.length,
+      takt_time: actualTaktTime,
+      flow_chart_data: {
+        sequences: sortedSequences,
+        totalSeconds,
+        workStations: finalStations,
+        balanceRate,
+        maxStationSeconds
+      },
+      updated_at: new Date().toISOString()
+    };
+
+    if (existing) {
+      await supabase
+        .from('process_flow_charts')
+        .update(flowData)
+        .eq('id', existing.id);
+    } else {
+      await supabase
+        .from('process_flow_charts')
+        .insert([{
+          configuration_id: configurationId,
+          component_id: componentId,
+          ...flowData
+        }]);
+    }
+
+    setWorkStations(finalStations);
+    setFlowChartData({
+      totalWorkers: finalStations.length,
+      taktTime: actualTaktTime,
+      flowChartData: {
+        totalSeconds,
+        balanceRate,
+        maxStationSeconds
+      }
+    });
+  };
+
+  const distributeProcessesToStations = (
+    sortedSequences: ProcessSequence[],
+    bottleneckProcess: ProcessSequence,
+    taktTime: number,
+    targetStationCount: number | null
+  ): WorkStation[] => {
+    const otherProcesses = sortedSequences.filter(p => p.id !== bottleneckProcess.id);
+
+    if (targetStationCount) {
+      return distributeWithFixedStations(sortedSequences, bottleneckProcess, taktTime, targetStationCount);
+    } else {
+      return findOptimalStationsWithTakt(sortedSequences, bottleneckProcess, taktTime);
+    }
+  };
+
+  const distributeWithFixedStations = (
+    processes: ProcessSequence[],
+    bottleneckProcess: ProcessSequence,
+    taktTime: number,
+    targetCount: number
+  ): WorkStation[] => {
+    if (targetCount < 1) return [];
+
+    const otherProcesses = processes.filter(p => p.id !== bottleneckProcess.id);
+    const stations: WorkStation[] = [];
+
+    for (let i = 0; i < targetCount; i++) {
+      stations.push({ id: i + 1, processes: [], totalSeconds: 0 });
+    }
+
+    let bottleneckInserted = false;
+    let currentStationIndex = 0;
+
+    for (const process of processes) {
+      if (process.id === bottleneckProcess.id) {
+        const emptyStationIndex = stations.findIndex(s => s.processes.length === 0);
+        if (emptyStationIndex !== -1) {
+          stations[emptyStationIndex].processes.push(process);
+          stations[emptyStationIndex].totalSeconds = process.work_seconds;
+          bottleneckInserted = true;
+          currentStationIndex = emptyStationIndex + 1;
+        } else {
+          if (currentStationIndex >= stations.length) currentStationIndex = 0;
+          const station = stations[currentStationIndex];
+          if (station.totalSeconds + process.work_seconds <= taktTime) {
+            station.processes.push(process);
+            station.totalSeconds += process.work_seconds;
+          } else {
+            return [];
+          }
+        }
+        continue;
+      }
+
+      let placed = false;
+      for (let attempt = 0; attempt < stations.length; attempt++) {
+        const stationIdx = (currentStationIndex + attempt) % stations.length;
+        const station = stations[stationIdx];
+
+        if (station.totalSeconds + process.work_seconds <= taktTime) {
+          station.processes.push(process);
+          station.totalSeconds += process.work_seconds;
+          placed = true;
+          currentStationIndex = stationIdx;
+          break;
+        }
+      }
+
+      if (!placed) {
+        return [];
+      }
+    }
+
+    return stations;
+  };
+
+  const findOptimalStationsWithTakt = (
+    processes: ProcessSequence[],
+    bottleneckProcess: ProcessSequence,
+    taktTime: number
+  ): WorkStation[] => {
+    const otherProcesses = processes.filter(p => p.id !== bottleneckProcess.id);
+    const n = otherProcesses.length;
+
+    if (n === 0) {
+      return [{
+        id: 1,
+        processes: [bottleneckProcess],
+        totalSeconds: bottleneckProcess.work_seconds
+      }];
+    }
+
+    const levelGroups = new Map<number, ProcessSequence[]>();
+    otherProcesses.forEach(p => {
+      if (!levelGroups.has(p.sequence_level)) {
+        levelGroups.set(p.sequence_level, []);
+      }
+      levelGroups.get(p.sequence_level)!.push(p);
+    });
+
+    let allSolutions: { stations: WorkStation[], variance: number, workloads: number[], stationCount: number, balanceRate: number }[] = [];
+
+    function validateLevelOrder(stations: WorkStation[]): boolean {
+      for (let i = 0; i < stations.length - 1; i++) {
+        const currentMaxLevel = Math.max(...stations[i].processes.map(p => p.sequence_level));
+        const nextMinLevel = Math.min(...stations[i + 1].processes.map(p => p.sequence_level));
+
+        if (currentMaxLevel > nextMinLevel) {
+          return false;
+        }
+      }
+      return true;
+    }
+
+    function enumerate(index: number, currentStations: WorkStation[], processOrder: ProcessSequence[]) {
+      if (index === n) {
+        const allValid = currentStations.every(s => s.totalSeconds <= taktTime);
+        if (!allValid) return;
+
+        if (!validateLevelOrder(currentStations)) {
+          return;
+        }
+
+        let insertPosition = 0;
+        for (let i = 0; i < currentStations.length; i++) {
+          const maxLevel = Math.max(...currentStations[i].processes.map(p => p.sequence_level));
+          const maxOrder = Math.max(...currentStations[i].processes
+            .filter(p => p.sequence_level === maxLevel)
+            .map(p => p.order_index));
+
+          if (maxLevel < bottleneckProcess.sequence_level ||
+              (maxLevel === bottleneckProcess.sequence_level && maxOrder < bottleneckProcess.order_index)) {
+            insertPosition = i + 1;
+          }
+        }
+
+        const fullStations = [...currentStations];
+        const bottleneckStation: WorkStation = {
+          id: 0,
+          processes: [bottleneckProcess],
+          totalSeconds: bottleneckProcess.work_seconds
+        };
+        fullStations.splice(insertPosition, 0, bottleneckStation);
+        fullStations.forEach((s, idx) => s.id = idx + 1);
+
+        if (!validateLevelOrder(fullStations)) {
+          return;
+        }
+
+        const totalSeconds = processes.reduce((sum, p) => sum + p.work_seconds, 0);
+        const workloads = fullStations.map(s => s.totalSeconds);
+        const variance = workloads.reduce((sum, w, _, arr) => {
+          const mean = arr.reduce((s, v) => s + v, 0) / arr.length;
+          return sum + Math.pow(w - mean, 2);
+        }, 0) / workloads.length;
+        const stationCount = fullStations.length;
+        const maxWorkload = Math.max(...workloads);
+        const balanceRate = (totalSeconds / (stationCount * maxWorkload)) * 100;
+
+        allSolutions.push({
+          stations: fullStations.map(s => ({
+            ...s,
+            processes: [...s.processes]
+          })),
+          variance: variance,
+          workloads: [...workloads],
+          stationCount: stationCount,
+          balanceRate: balanceRate
+        });
+
+        return;
+      }
+
+      const currentProcess = processOrder[index];
+      const currentProcessSeconds = currentProcess.work_seconds;
+      const currentLevel = currentProcess.sequence_level;
+
+      for (let i = 0; i < currentStations.length; i++) {
+        const station = currentStations[i];
+        const newTotal = station.totalSeconds + currentProcessSeconds;
+
+        if (newTotal <= taktTime) {
+          let canAdd = true;
+          if (i < currentStations.length - 1) {
+            const nextMinLevel = Math.min(...currentStations[i + 1].processes.map(p => p.sequence_level));
+            if (currentLevel > nextMinLevel) {
+              canAdd = false;
+            }
+          }
+
+          if (canAdd) {
+            station.processes.push(currentProcess);
+            station.totalSeconds += currentProcess.work_seconds;
+            enumerate(index + 1, currentStations, processOrder);
+            station.processes.pop();
+            station.totalSeconds -= currentProcess.work_seconds;
+          }
+        }
+      }
+
+      currentStations.push({
+        id: currentStations.length + 1,
+        processes: [currentProcess],
+        totalSeconds: currentProcess.work_seconds
+      });
+
+      enumerate(index + 1, currentStations, processOrder);
+      currentStations.pop();
+    }
+
+    enumerate(0, [], otherProcesses);
+
+    if (allSolutions.length === 0) {
+      console.log('未找到有效方案');
+      return [];
+    }
+
+    allSolutions.sort((a, b) => {
+      const balanceDiff = b.balanceRate - a.balanceRate;
+      if (Math.abs(balanceDiff) > 0.1) {
+        return balanceDiff;
+      }
+      return a.variance - b.variance;
+    });
+
+    return allSolutions[0].stations;
   };
 
   const generateFlowChart = async () => {
@@ -1075,25 +1407,123 @@ export default function LineBalancingArea({ configurationId, componentId }: Line
       {/* 第二步：工艺展开流程图 */}
       {flowChartData && workStations.length > 0 && (
         <div className="border-4 border-green-300 rounded-xl overflow-hidden shadow-lg">
-          <div className="bg-gradient-to-r from-green-600 to-green-700 text-white px-6 py-4 flex justify-between items-center">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-white text-green-600 flex items-center justify-center font-bold">2</div>
-              <h3 className="text-xl font-bold">工艺展开流程图</h3>
-              <div className="ml-4 bg-white/20 px-3 py-1 rounded-full text-sm">
-                ✨ 已自动优化至最佳平衡率
+          <div className="bg-gradient-to-r from-green-600 to-green-700 text-white px-6 py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-white text-green-600 flex items-center justify-center font-bold">2</div>
+                <h3 className="text-xl font-bold">工艺展开流程图</h3>
+                <div className="ml-4 bg-white/20 px-3 py-1 rounded-full text-sm">
+                  ✨ 已自动优化至最佳平衡率
+                </div>
+              </div>
+              <div className="text-sm bg-white/10 px-3 py-1.5 rounded-lg">
+                💡 点击工位数或节拍时间右侧的 <Edit2 size={14} className="inline" /> 图标可手动调整
               </div>
             </div>
           </div>
           <div className="bg-green-50 p-6 space-y-6">
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="bg-white rounded-lg p-4 shadow">
-              <p className="text-sm text-gray-600 mb-1">最优工位数（已优化）</p>
-              <p className="text-3xl font-bold text-blue-600">{flowChartData.totalWorkers || 0} 人</p>
+            <div className="bg-white rounded-lg p-4 shadow border-2 border-blue-200 hover:border-blue-400 transition-all">
+              <p className="text-sm text-gray-600 mb-2 flex items-center justify-between">
+                <span>工位数</span>
+                {!isEditingStationCount && (
+                  <button
+                    onClick={() => {
+                      setIsEditingStationCount(true);
+                      setManualStationCount(flowChartData.totalWorkers);
+                    }}
+                    className="text-blue-600 hover:text-blue-800"
+                    title="点击修改"
+                  >
+                    <Edit2 size={16} />
+                  </button>
+                )}
+              </p>
+              {isEditingStationCount ? (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="1"
+                    value={manualStationCount || ''}
+                    onChange={(e) => setManualStationCount(parseInt(e.target.value) || null)}
+                    className="w-20 px-2 py-1 border-2 border-blue-500 rounded text-xl font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    autoFocus
+                  />
+                  <span className="text-sm text-gray-600">人</span>
+                  <button
+                    onClick={recalculateWithManualParams}
+                    disabled={loading}
+                    className="p-1 text-white bg-green-600 hover:bg-green-700 rounded disabled:bg-gray-400"
+                    title="应用"
+                  >
+                    <Check size={16} />
+                  </button>
+                  <button
+                    onClick={() => {
+                      setIsEditingStationCount(false);
+                      setManualStationCount(null);
+                    }}
+                    className="p-1 text-gray-600 hover:bg-gray-100 rounded"
+                    title="取消"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ) : (
+                <p className="text-3xl font-bold text-blue-600">{flowChartData.totalWorkers || 0} 人</p>
+              )}
             </div>
-            <div className="bg-white rounded-lg p-4 shadow">
-              <p className="text-sm text-gray-600 mb-1">节拍时间</p>
-              <p className="text-3xl font-bold text-green-600">{(flowChartData.taktTime || 0).toFixed(2)} 秒</p>
+            <div className="bg-white rounded-lg p-4 shadow border-2 border-green-200 hover:border-green-400 transition-all">
+              <p className="text-sm text-gray-600 mb-2 flex items-center justify-between">
+                <span>节拍时间</span>
+                {!isEditingTaktTime && (
+                  <button
+                    onClick={() => {
+                      setIsEditingTaktTime(true);
+                      setManualTaktTime(flowChartData.taktTime);
+                    }}
+                    className="text-green-600 hover:text-green-800"
+                    title="点击修改"
+                  >
+                    <Edit2 size={16} />
+                  </button>
+                )}
+              </p>
+              {isEditingTaktTime ? (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    value={manualTaktTime || ''}
+                    onChange={(e) => setManualTaktTime(parseFloat(e.target.value) || null)}
+                    className="w-24 px-2 py-1 border-2 border-green-500 rounded text-xl font-bold focus:outline-none focus:ring-2 focus:ring-green-500"
+                    autoFocus
+                  />
+                  <span className="text-sm text-gray-600">秒</span>
+                  <button
+                    onClick={recalculateWithManualParams}
+                    disabled={loading}
+                    className="p-1 text-white bg-green-600 hover:bg-green-700 rounded disabled:bg-gray-400"
+                    title="应用"
+                  >
+                    <Check size={16} />
+                  </button>
+                  <button
+                    onClick={() => {
+                      setIsEditingTaktTime(false);
+                      setManualTaktTime(null);
+                    }}
+                    className="p-1 text-gray-600 hover:bg-gray-100 rounded"
+                    title="取消"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ) : (
+                <p className="text-3xl font-bold text-green-600">{(flowChartData.taktTime || 0).toFixed(2)} 秒</p>
+              )}
             </div>
             <div className="bg-white rounded-lg p-4 shadow">
               <p className="text-sm text-gray-600 mb-1">生产线平衡率</p>
@@ -1107,6 +1537,15 @@ export default function LineBalancingArea({ configurationId, componentId }: Line
                 {(flowChartData.flowChartData?.totalSeconds || 0).toFixed(0)}秒
               </p>
             </div>
+          </div>
+
+          <div className="bg-amber-50 border-2 border-amber-300 rounded-lg p-4">
+            <p className="text-sm text-amber-800 font-medium mb-2">🔧 手动调整说明：</p>
+            <ul className="text-sm text-amber-700 space-y-1 ml-4">
+              <li>• <span className="font-semibold">修改工位数</span>：系统将按照您指定的工位数重新分配工序，并尽可能提高平衡率</li>
+              <li>• <span className="font-semibold">修改节拍时间</span>：系统将以新的节拍时间为约束，重新优化工位数和工序分配</li>
+              <li>• 修改后将自动重新计算工艺展开流程图，保持最高平衡率原则</li>
+            </ul>
           </div>
 
           <details className="bg-white rounded-lg shadow border-l-4 border-green-500">
