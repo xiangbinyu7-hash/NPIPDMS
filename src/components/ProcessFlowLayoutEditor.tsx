@@ -255,10 +255,27 @@ export default function ProcessFlowLayoutEditor({
     console.log('节点总数:', newNodes.length, '(预期:', workStations.length + 2, ')');
     console.log('节点列表:', newNodes.map(n => n.id).join(', '));
     console.log('连接总数:', newConnections.length);
-    console.log('连接列表:', newConnections.map(c => `${c.from}->${c.to}`).join(', '));
+    console.log('\n完整连接列表:');
+    newConnections.forEach((conn, idx) => {
+      const fromNode = newNodes.find(n => n.id === conn.from);
+      const toNode = newNodes.find(n => n.id === conn.to);
+      console.log(`  ${idx + 1}. ${conn.from} -> ${conn.to}`,
+        fromNode ? '✓' : '✗ (from缺失)',
+        toNode ? '✓' : '✗ (to缺失)');
+    });
 
     if (newNodes.length !== workStations.length + 2) {
       console.error('警告: 节点数量不匹配！应该有', workStations.length + 2, '个节点（含开始和结束），实际有', newNodes.length);
+    }
+
+    const nodeIds = new Set(newNodes.map(n => n.id));
+    const missingConnections: string[] = [];
+    newConnections.forEach(conn => {
+      if (!nodeIds.has(conn.from)) missingConnections.push(`from: ${conn.from}`);
+      if (!nodeIds.has(conn.to)) missingConnections.push(`to: ${conn.to}`);
+    });
+    if (missingConnections.length > 0) {
+      console.error('❌ 发现缺失的节点引用:', missingConnections);
     }
 
     setNodes(newNodes);
@@ -658,12 +675,17 @@ export default function ProcessFlowLayoutEditor({
           key={`svg-${refreshKey}`}
           className="absolute inset-0 w-full h-full pointer-events-none"
           style={{ zIndex: 1, minWidth: '2000px', minHeight: '500px' }}
+          preserveAspectRatio="xMidYMid meet"
         >
           {connections.map((conn, index) => {
             const fromNode = nodes.find(n => n.id === conn.from);
             const toNode = nodes.find(n => n.id === conn.to);
             if (!fromNode || !toNode) {
-              console.warn(`连接 ${conn.from} -> ${conn.to} 缺少节点`, { fromNode, toNode });
+              console.warn(`❌ 渲染时：连接 ${conn.from} -> ${conn.to} 缺少节点`, {
+                from: fromNode?.id || 'missing',
+                to: toNode?.id || 'missing',
+                allNodeIds: nodes.map(n => n.id)
+              });
               return null;
             }
 
@@ -740,6 +762,41 @@ export default function ProcessFlowLayoutEditor({
           style={{ zIndex: 2, minWidth: '2000px', minHeight: '500px' }}
         >
           {nodes.map(renderNode)}
+        </div>
+      </div>
+
+      {/* 调试信息面板 */}
+      <div className="text-xs text-gray-700 bg-blue-50 p-3 rounded-lg border border-blue-200">
+        <p className="font-semibold mb-2 text-blue-800">🔍 连接调试信息</p>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <p className="font-medium text-gray-700 mb-1">所有节点 ({nodes.length}):</p>
+            <div className="text-xs space-y-0.5">
+              {nodes.map(n => (
+                <div key={n.id} className="text-gray-600">
+                  • {n.id} ({n.label})
+                </div>
+              ))}
+            </div>
+          </div>
+          <div>
+            <p className="font-medium text-gray-700 mb-1">所有连接 ({connections.length}):</p>
+            <div className="text-xs space-y-0.5 max-h-60 overflow-y-auto">
+              {connections.map((conn, idx) => {
+                const fromExists = nodes.some(n => n.id === conn.from);
+                const toExists = nodes.some(n => n.id === conn.to);
+                const hasIssue = !fromExists || !toExists;
+                return (
+                  <div key={idx} className={hasIssue ? 'text-red-600 font-semibold' : 'text-gray-600'}>
+                    {hasIssue && '❌ '}
+                    {idx + 1}. {conn.from} → {conn.to}
+                    {!fromExists && ' (from缺失)'}
+                    {!toExists && ' (to缺失)'}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
       </div>
 
