@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import {
   Plus, Trash2, Video, AlertCircle, Save, Clock, Wrench, CheckCircle,
-  Eye, Download, Edit, FileText, Search, Filter, X, ArrowLeft
+  Eye, Edit, FileText, Search, ArrowLeft, Share2, Copy, ExternalLink
 } from 'lucide-react';
 
 interface Process {
@@ -77,6 +77,8 @@ export default function WorkInstructionModule({ configurationId, componentId }: 
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [showShareDialog, setShowShareDialog] = useState(false);
+  const [shareUrl, setShareUrl] = useState('');
 
   const [steps, setSteps] = useState<WorkInstructionStep[]>([]);
   const [selectedStepIndex, setSelectedStepIndex] = useState<number>(0);
@@ -217,6 +219,17 @@ export default function WorkInstructionModule({ configurationId, componentId }: 
       console.error('删除失败:', error);
       alert('删除失败');
     }
+  };
+
+  const handleShare = (instruction: WorkInstruction) => {
+    const url = `${window.location.origin}/share/work-instruction/${instruction.id}`;
+    setShareUrl(url);
+    setShowShareDialog(true);
+  };
+
+  const copyShareUrl = () => {
+    navigator.clipboard.writeText(shareUrl);
+    alert('链接已复制到剪贴板');
   };
 
   const handleSave = async () => {
@@ -401,9 +414,9 @@ export default function WorkInstructionModule({ configurationId, componentId }: 
 
   const getStatusBadge = (status: string) => {
     const statusConfig: Record<string, { label: string; class: string }> = {
-      draft: { label: '草稿', class: 'bg-gray-600' },
-      published: { label: '已发布', class: 'bg-green-600' },
-      archived: { label: '已归档', class: 'bg-yellow-600' }
+      draft: { label: '草稿', class: 'bg-gray-500' },
+      published: { label: '已发布', class: 'bg-green-500' },
+      archived: { label: '已归档', class: 'bg-yellow-500' }
     };
     const config = statusConfig[status] || statusConfig.draft;
     return (
@@ -431,60 +444,69 @@ export default function WorkInstructionModule({ configurationId, componentId }: 
 
   if (viewMode === 'detail' && selectedInstruction) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-6">
-        <div className="max-w-6xl mx-auto">
+      <div className="space-y-6">
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <div className="flex items-center justify-between mb-6">
             <button
               onClick={() => setViewMode('list')}
-              className="flex items-center gap-2 px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors"
+              className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
             >
               <ArrowLeft className="w-4 h-4" />
               返回列表
             </button>
-            <button
-              onClick={() => setViewMode('edit')}
-              className="flex items-center gap-2 px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
-            >
-              <Edit className="w-4 h-4" />
-              编辑
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => handleShare(selectedInstruction)}
+                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+              >
+                <Share2 className="w-4 h-4" />
+                分享
+              </button>
+              <button
+                onClick={() => setViewMode('edit')}
+                className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                <Edit className="w-4 h-4" />
+                编辑
+              </button>
+            </div>
           </div>
 
-          <div className="bg-slate-800 rounded-xl p-8 mb-6">
-            <div className="flex items-start justify-between mb-6">
+          <div className="border-b border-gray-200 pb-6 mb-6">
+            <div className="flex items-start justify-between mb-4">
               <div>
-                <h1 className="text-3xl font-bold text-white mb-2">{selectedInstruction.title}</h1>
-                <p className="text-slate-400">{selectedInstruction.description}</p>
+                <h1 className="text-3xl font-bold text-gray-900 mb-2">{selectedInstruction.title}</h1>
+                <p className="text-gray-600">{selectedInstruction.description}</p>
               </div>
               {getStatusBadge(selectedInstruction.status)}
             </div>
             <div className="grid grid-cols-3 gap-4 text-sm">
               <div>
-                <span className="text-slate-400">版本：</span>
-                <span className="text-white">{selectedInstruction.version}</span>
+                <span className="text-gray-500">版本：</span>
+                <span className="text-gray-900 font-medium">{selectedInstruction.version}</span>
               </div>
               <div>
-                <span className="text-slate-400">创建时间：</span>
-                <span className="text-white">{formatDate(selectedInstruction.created_at)}</span>
+                <span className="text-gray-500">创建时间：</span>
+                <span className="text-gray-900 font-medium">{formatDate(selectedInstruction.created_at)}</span>
               </div>
               <div>
-                <span className="text-slate-400">更新时间：</span>
-                <span className="text-white">{formatDate(selectedInstruction.updated_at)}</span>
+                <span className="text-gray-500">更新时间：</span>
+                <span className="text-gray-900 font-medium">{formatDate(selectedInstruction.updated_at)}</span>
               </div>
             </div>
           </div>
 
           <div className="space-y-4">
             {selectedInstruction.steps?.map((step, index) => (
-              <div key={index} className="bg-slate-800 rounded-xl p-6">
+              <div key={index} className="bg-gray-50 rounded-lg p-6 border border-gray-200">
                 <div className="flex items-center gap-3 mb-4">
-                  <div className="w-10 h-10 bg-purple-600 rounded-full flex items-center justify-center text-white font-bold">
+                  <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold">
                     {step.step_number}
                   </div>
                   <div>
-                    <h3 className="text-xl font-semibold text-white">{step.step_title}</h3>
+                    <h3 className="text-xl font-semibold text-gray-900">{step.step_title}</h3>
                     {step.duration_seconds > 0 && (
-                      <p className="text-sm text-slate-400 flex items-center gap-1">
+                      <p className="text-sm text-gray-500 flex items-center gap-1">
                         <Clock className="w-3 h-3" />
                         预计耗时: {step.duration_seconds}秒
                       </p>
@@ -494,12 +516,12 @@ export default function WorkInstructionModule({ configurationId, componentId }: 
 
                 {step.step_description && (
                   <div className="mb-4">
-                    <p className="text-slate-300">{step.step_description}</p>
+                    <p className="text-gray-700">{step.step_description}</p>
                   </div>
                 )}
 
                 {step.video_url && (
-                  <div className="mb-4 bg-slate-900 rounded-lg overflow-hidden">
+                  <div className="mb-4 bg-black rounded-lg overflow-hidden">
                     <video src={step.video_url} controls className="w-full" style={{ maxHeight: '400px' }}>
                       您的浏览器不支持视频播放
                     </video>
@@ -508,14 +530,14 @@ export default function WorkInstructionModule({ configurationId, componentId }: 
 
                 <div className="grid grid-cols-2 gap-4">
                   {step.tools.length > 0 && (
-                    <div className="bg-slate-700 rounded-lg p-4">
-                      <h4 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
-                        <Wrench className="w-4 h-4" />
+                    <div className="bg-white rounded-lg p-4 border border-gray-200">
+                      <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                        <Wrench className="w-4 h-4 text-blue-600" />
                         工具清单
                       </h4>
                       <ul className="space-y-2">
                         {step.tools.map((tool, i) => (
-                          <li key={i} className="text-sm text-slate-300">
+                          <li key={i} className="text-sm text-gray-700">
                             • {tool.name} {tool.spec && `(${tool.spec})`}
                           </li>
                         ))}
@@ -524,17 +546,17 @@ export default function WorkInstructionModule({ configurationId, componentId }: 
                   )}
 
                   {step.key_points.length > 0 && (
-                    <div className="bg-slate-700 rounded-lg p-4">
-                      <h4 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
-                        <AlertCircle className="w-4 h-4" />
+                    <div className="bg-white rounded-lg p-4 border border-gray-200">
+                      <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                        <AlertCircle className="w-4 h-4 text-orange-600" />
                         作业要点
                       </h4>
                       <ul className="space-y-2">
                         {step.key_points.map((point, i) => (
-                          <li key={i} className="text-sm text-slate-300 flex items-start gap-2">
-                            <span className={`px-2 py-0.5 rounded text-xs ${
-                              point.priority === 'high' ? 'bg-red-600' :
-                              point.priority === 'medium' ? 'bg-yellow-600' : 'bg-blue-600'
+                          <li key={i} className="text-sm text-gray-700 flex items-start gap-2">
+                            <span className={`px-2 py-0.5 rounded text-xs text-white ${
+                              point.priority === 'high' ? 'bg-red-500' :
+                              point.priority === 'medium' ? 'bg-yellow-500' : 'bg-blue-500'
                             }`}>
                               {point.priority === 'high' ? '高' : point.priority === 'medium' ? '中' : '低'}
                             </span>
@@ -546,12 +568,12 @@ export default function WorkInstructionModule({ configurationId, componentId }: 
                   )}
 
                   {Object.keys(step.parameters).length > 0 && (
-                    <div className="bg-slate-700 rounded-lg p-4">
-                      <h4 className="text-sm font-semibold text-white mb-3">工艺参数</h4>
+                    <div className="bg-white rounded-lg p-4 border border-gray-200">
+                      <h4 className="text-sm font-semibold text-gray-900 mb-3">工艺参数</h4>
                       <div className="space-y-2">
                         {Object.entries(step.parameters).map(([key, value]) => (
-                          <div key={key} className="text-sm text-slate-300">
-                            <span className="text-slate-400">{key}:</span> {value}
+                          <div key={key} className="text-sm text-gray-700">
+                            <span className="text-gray-500 font-medium">{key}:</span> {value}
                           </div>
                         ))}
                       </div>
@@ -559,14 +581,14 @@ export default function WorkInstructionModule({ configurationId, componentId }: 
                   )}
 
                   {step.quality_checkpoints.length > 0 && (
-                    <div className="bg-slate-700 rounded-lg p-4">
-                      <h4 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
-                        <CheckCircle className="w-4 h-4" />
+                    <div className="bg-white rounded-lg p-4 border border-gray-200">
+                      <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                        <CheckCircle className="w-4 h-4 text-green-600" />
                         质量检查点
                       </h4>
                       <ul className="space-y-2">
                         {step.quality_checkpoints.map((check, i) => (
-                          <li key={i} className="text-sm text-slate-300">
+                          <li key={i} className="text-sm text-gray-700">
                             • {check.item}: {check.standard}
                           </li>
                         ))}
@@ -576,12 +598,12 @@ export default function WorkInstructionModule({ configurationId, componentId }: 
                 </div>
 
                 {step.safety_notes && (
-                  <div className="mt-4 bg-red-900/30 border border-red-600 rounded-lg p-4">
-                    <h4 className="text-sm font-semibold text-red-400 mb-2 flex items-center gap-2">
+                  <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-4">
+                    <h4 className="text-sm font-semibold text-red-700 mb-2 flex items-center gap-2">
                       <AlertCircle className="w-4 h-4" />
                       安全注意事项
                     </h4>
-                    <p className="text-sm text-red-300">{step.safety_notes}</p>
+                    <p className="text-sm text-red-600">{step.safety_notes}</p>
                   </div>
                 )}
               </div>
@@ -596,8 +618,8 @@ export default function WorkInstructionModule({ configurationId, componentId }: 
     const currentStep = steps[selectedStepIndex];
 
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-6">
-        <div className="max-w-7xl mx-auto">
+      <div className="space-y-6">
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <div className="flex items-center justify-between mb-6">
             <button
               onClick={() => {
@@ -605,7 +627,7 @@ export default function WorkInstructionModule({ configurationId, componentId }: 
                   setViewMode('list');
                 }
               }}
-              className="flex items-center gap-2 px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors"
+              className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
             >
               <ArrowLeft className="w-4 h-4" />
               取消
@@ -613,31 +635,31 @@ export default function WorkInstructionModule({ configurationId, componentId }: 
             <button
               onClick={handleSave}
               disabled={saving}
-              className="flex items-center gap-2 px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 transition-colors"
+              className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
             >
               <Save className="w-4 h-4" />
               {saving ? '保存中...' : '保存'}
             </button>
           </div>
 
-          <div className="bg-slate-800 rounded-xl p-6 mb-6">
-            <h2 className="text-2xl font-bold text-white mb-6">基本信息</h2>
+          <div className="mb-6 pb-6 border-b border-gray-200">
+            <h2 className="text-2xl font-bold text-gray-900 mb-6">基本信息</h2>
             <div className="grid grid-cols-2 gap-4 mb-4">
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">标题</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">标题</label>
                 <input
                   type="text"
                   value={selectedInstruction.title}
                   onChange={(e) => setSelectedInstruction({ ...selectedInstruction, title: e.target.value })}
-                  className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">关联工序</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">关联工序</label>
                 <select
                   value={selectedInstruction.process_id || ''}
                   onChange={(e) => setSelectedInstruction({ ...selectedInstruction, process_id: e.target.value })}
-                  className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
                   <option value="">请选择工序</option>
                   {processes.map(process => (
@@ -650,20 +672,20 @@ export default function WorkInstructionModule({ configurationId, componentId }: 
             </div>
             <div className="grid grid-cols-2 gap-4 mb-4">
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">版本</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">版本</label>
                 <input
                   type="text"
                   value={selectedInstruction.version}
                   onChange={(e) => setSelectedInstruction({ ...selectedInstruction, version: e.target.value })}
-                  className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">状态</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">状态</label>
                 <select
                   value={selectedInstruction.status}
                   onChange={(e) => setSelectedInstruction({ ...selectedInstruction, status: e.target.value as any })}
-                  className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
                   <option value="draft">草稿</option>
                   <option value="published">已发布</option>
@@ -672,23 +694,23 @@ export default function WorkInstructionModule({ configurationId, componentId }: 
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">描述</label>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">描述</label>
               <textarea
                 value={selectedInstruction.description}
                 onChange={(e) => setSelectedInstruction({ ...selectedInstruction, description: e.target.value })}
                 rows={3}
-                className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-5 gap-6">
-            <div className="col-span-1 bg-slate-800 p-4 rounded-xl">
+            <div className="col-span-1 bg-gray-50 p-4 rounded-lg border border-gray-200">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="font-semibold text-white">步骤列表</h3>
+                <h3 className="font-semibold text-gray-800">步骤列表</h3>
                 <button
                   onClick={addStep}
-                  className="p-1 bg-purple-600 text-white rounded hover:bg-purple-700"
+                  className="p-1 bg-blue-600 text-white rounded hover:bg-blue-700"
                 >
                   <Plus className="w-4 h-4" />
                 </button>
@@ -700,13 +722,13 @@ export default function WorkInstructionModule({ configurationId, componentId }: 
                     onClick={() => setSelectedStepIndex(index)}
                     className={`p-3 rounded-lg cursor-pointer flex items-center justify-between ${
                       selectedStepIndex === index
-                        ? 'bg-purple-600 text-white'
-                        : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                        ? 'bg-blue-100 border-2 border-blue-500'
+                        : 'bg-white border border-gray-200 hover:border-blue-300'
                     }`}
                   >
                     <div className="flex-1">
-                      <div className="font-medium text-sm">步骤 {index + 1}</div>
-                      <div className="text-xs truncate">{step.step_title}</div>
+                      <div className="font-medium text-sm text-gray-800">步骤 {index + 1}</div>
+                      <div className="text-xs text-gray-500 truncate">{step.step_title}</div>
                     </div>
                     {steps.length > 1 && (
                       <button
@@ -714,7 +736,7 @@ export default function WorkInstructionModule({ configurationId, componentId }: 
                           e.stopPropagation();
                           deleteStep(index);
                         }}
-                        className="p-1 text-red-400 hover:bg-red-900/30 rounded"
+                        className="p-1 text-red-500 hover:bg-red-50 rounded"
                       >
                         <Trash2 className="w-3 h-3" />
                       </button>
@@ -727,29 +749,29 @@ export default function WorkInstructionModule({ configurationId, componentId }: 
             <div className="col-span-4 space-y-6">
               {currentStep && (
                 <>
-                  <div className="bg-slate-800 p-6 rounded-xl">
-                    <h3 className="font-semibold text-lg text-white mb-4">步骤 {selectedStepIndex + 1} - 基本信息</h3>
+                  <div className="bg-white p-6 rounded-lg border border-gray-200">
+                    <h3 className="font-semibold text-lg text-gray-800 mb-4">步骤 {selectedStepIndex + 1} - 基本信息</h3>
                     <div className="space-y-4">
                       <div>
-                        <label className="block text-sm font-medium text-slate-300 mb-2">步骤标题</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">步骤标题</label>
                         <input
                           type="text"
                           value={currentStep.step_title}
                           onChange={(e) => updateStep(selectedStepIndex, 'step_title', e.target.value)}
-                          className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-slate-300 mb-2">步骤描述</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">步骤描述</label>
                         <textarea
                           value={currentStep.step_description}
                           onChange={(e) => updateStep(selectedStepIndex, 'step_description', e.target.value)}
                           rows={4}
-                          className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-slate-300 mb-2 flex items-center gap-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
                           <Clock className="w-4 h-4" />
                           预计耗时（秒）
                         </label>
@@ -757,30 +779,30 @@ export default function WorkInstructionModule({ configurationId, componentId }: 
                           type="number"
                           value={currentStep.duration_seconds}
                           onChange={(e) => updateStep(selectedStepIndex, 'duration_seconds', parseInt(e.target.value) || 0)}
-                          className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         />
                       </div>
                     </div>
                   </div>
 
-                  <div className="bg-slate-800 p-6 rounded-xl">
-                    <h3 className="font-semibold text-lg text-white mb-4 flex items-center gap-2">
-                      <Video className="w-5 h-5 text-purple-400" />
+                  <div className="bg-white p-6 rounded-lg border border-gray-200">
+                    <h3 className="font-semibold text-lg text-gray-800 mb-4 flex items-center gap-2">
+                      <Video className="w-5 h-5 text-blue-600" />
                       视频作业指导
                     </h3>
                     <div className="space-y-4">
                       <div>
-                        <label className="block text-sm font-medium text-slate-300 mb-2">视频URL</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">视频URL</label>
                         <input
                           type="text"
                           value={currentStep.video_url}
                           onChange={(e) => updateStep(selectedStepIndex, 'video_url', e.target.value)}
                           placeholder="输入视频链接（支持MP4、YouTube、Bilibili等）"
-                          className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         />
                       </div>
                       {currentStep.video_url && (
-                        <div className="bg-slate-900 rounded-lg overflow-hidden">
+                        <div className="bg-black rounded-lg overflow-hidden">
                           <video src={currentStep.video_url} controls className="w-full" style={{ maxHeight: '400px' }}>
                             您的浏览器不支持视频播放
                           </video>
@@ -789,15 +811,15 @@ export default function WorkInstructionModule({ configurationId, componentId }: 
                     </div>
                   </div>
 
-                  <div className="bg-slate-800 p-6 rounded-xl">
+                  <div className="bg-white p-6 rounded-lg border border-gray-200">
                     <div className="flex items-center justify-between mb-4">
-                      <h3 className="font-semibold text-lg text-white flex items-center gap-2">
-                        <Wrench className="w-5 h-5 text-purple-400" />
+                      <h3 className="font-semibold text-lg text-gray-800 flex items-center gap-2">
+                        <Wrench className="w-5 h-5 text-blue-600" />
                         工具清单
                       </h3>
                       <button
                         onClick={() => addTool(selectedStepIndex)}
-                        className="px-3 py-1 bg-purple-600 text-white rounded hover:bg-purple-700 text-sm flex items-center gap-1"
+                        className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm flex items-center gap-1"
                       >
                         <Plus className="w-4 h-4" />
                         添加工具
@@ -805,41 +827,41 @@ export default function WorkInstructionModule({ configurationId, componentId }: 
                     </div>
                     <div className="space-y-3">
                       {currentStep.tools.map((tool, toolIndex) => (
-                        <div key={toolIndex} className="flex gap-3 items-start p-3 bg-slate-700 rounded-lg">
+                        <div key={toolIndex} className="flex gap-3 items-start p-3 bg-gray-50 rounded-lg">
                           <div className="flex-1 grid grid-cols-2 gap-3">
                             <input
                               type="text"
                               value={tool.name}
                               onChange={(e) => updateTool(selectedStepIndex, toolIndex, 'name', e.target.value)}
                               placeholder="工具名称"
-                              className="px-3 py-2 bg-slate-600 border border-slate-500 rounded text-white text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                              className="px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                             />
                             <input
                               type="text"
                               value={tool.spec}
                               onChange={(e) => updateTool(selectedStepIndex, toolIndex, 'spec', e.target.value)}
                               placeholder="规格型号"
-                              className="px-3 py-2 bg-slate-600 border border-slate-500 rounded text-white text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                              className="px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                             />
                           </div>
                           <button
                             onClick={() => deleteTool(selectedStepIndex, toolIndex)}
-                            className="p-2 text-red-400 hover:bg-red-900/30 rounded"
+                            className="p-2 text-red-500 hover:bg-red-50 rounded"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
                       ))}
                       {currentStep.tools.length === 0 && (
-                        <div className="text-sm text-slate-400 text-center py-4">暂无工具，点击上方按钮添加</div>
+                        <div className="text-sm text-gray-400 text-center py-4">暂无工具，点击上方按钮添加</div>
                       )}
                     </div>
                   </div>
 
-                  <div className="bg-slate-800 p-6 rounded-xl">
+                  <div className="bg-white p-6 rounded-lg border border-gray-200">
                     <div className="flex items-center justify-between mb-4">
-                      <h3 className="font-semibold text-lg text-white flex items-center gap-2">
-                        <AlertCircle className="w-5 h-5 text-orange-400" />
+                      <h3 className="font-semibold text-lg text-gray-800 flex items-center gap-2">
+                        <AlertCircle className="w-5 h-5 text-orange-600" />
                         作业要点
                       </h3>
                       <button
@@ -852,19 +874,19 @@ export default function WorkInstructionModule({ configurationId, componentId }: 
                     </div>
                     <div className="space-y-3">
                       {currentStep.key_points.map((point, pointIndex) => (
-                        <div key={pointIndex} className="flex gap-3 items-start p-3 bg-slate-700 rounded-lg">
+                        <div key={pointIndex} className="flex gap-3 items-start p-3 bg-gray-50 rounded-lg">
                           <div className="flex-1 grid grid-cols-3 gap-3">
                             <textarea
                               value={point.point}
                               onChange={(e) => updateKeyPoint(selectedStepIndex, pointIndex, 'point', e.target.value)}
                               placeholder="作业要点内容"
                               rows={2}
-                              className="col-span-2 px-3 py-2 bg-slate-600 border border-slate-500 rounded text-white text-sm focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                              className="col-span-2 px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-orange-500 focus:border-transparent text-sm"
                             />
                             <select
                               value={point.priority}
                               onChange={(e) => updateKeyPoint(selectedStepIndex, pointIndex, 'priority', e.target.value)}
-                              className="px-3 py-2 bg-slate-600 border border-slate-500 rounded text-white text-sm focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                              className="px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-orange-500 focus:border-transparent text-sm"
                             >
                               <option value="high">高优先级</option>
                               <option value="medium">中优先级</option>
@@ -873,21 +895,21 @@ export default function WorkInstructionModule({ configurationId, componentId }: 
                           </div>
                           <button
                             onClick={() => deleteKeyPoint(selectedStepIndex, pointIndex)}
-                            className="p-2 text-red-400 hover:bg-red-900/30 rounded"
+                            className="p-2 text-red-500 hover:bg-red-50 rounded"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
                       ))}
                       {currentStep.key_points.length === 0 && (
-                        <div className="text-sm text-slate-400 text-center py-4">暂无作业要点，点击上方按钮添加</div>
+                        <div className="text-sm text-gray-400 text-center py-4">暂无作业要点，点击上方按钮添加</div>
                       )}
                     </div>
                   </div>
 
-                  <div className="bg-slate-800 p-6 rounded-xl">
+                  <div className="bg-white p-6 rounded-lg border border-gray-200">
                     <div className="flex items-center justify-between mb-4">
-                      <h3 className="font-semibold text-lg text-white">工艺参数</h3>
+                      <h3 className="font-semibold text-lg text-gray-800">工艺参数</h3>
                       <button
                         onClick={() => addParameter(selectedStepIndex)}
                         className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm flex items-center gap-1"
@@ -898,9 +920,9 @@ export default function WorkInstructionModule({ configurationId, componentId }: 
                     </div>
                     <div className="space-y-3">
                       {Object.entries(currentStep.parameters).map(([key, value]) => (
-                        <div key={key} className="flex gap-3 items-center p-3 bg-slate-700 rounded-lg">
+                        <div key={key} className="flex gap-3 items-center p-3 bg-gray-50 rounded-lg">
                           <div className="flex-1 grid grid-cols-2 gap-3">
-                            <div className="font-medium text-slate-300 flex items-center px-3 py-2 bg-slate-600 border border-slate-500 rounded">
+                            <div className="font-medium text-gray-700 flex items-center px-3 py-2 bg-white border border-gray-200 rounded">
                               {key}
                             </div>
                             <input
@@ -908,27 +930,27 @@ export default function WorkInstructionModule({ configurationId, componentId }: 
                               value={value}
                               onChange={(e) => updateParameterValue(selectedStepIndex, key, e.target.value)}
                               placeholder="参数值"
-                              className="px-3 py-2 bg-slate-600 border border-slate-500 rounded text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                              className="px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                             />
                           </div>
                           <button
                             onClick={() => deleteParameter(selectedStepIndex, key)}
-                            className="p-2 text-red-400 hover:bg-red-900/30 rounded"
+                            className="p-2 text-red-500 hover:bg-red-50 rounded"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
                       ))}
                       {Object.keys(currentStep.parameters).length === 0 && (
-                        <div className="text-sm text-slate-400 text-center py-4">暂无参数，点击上方按钮添加</div>
+                        <div className="text-sm text-gray-400 text-center py-4">暂无参数，点击上方按钮添加</div>
                       )}
                     </div>
                   </div>
 
-                  <div className="bg-slate-800 p-6 rounded-xl">
+                  <div className="bg-white p-6 rounded-lg border border-gray-200">
                     <div className="flex items-center justify-between mb-4">
-                      <h3 className="font-semibold text-lg text-white flex items-center gap-2">
-                        <CheckCircle className="w-5 h-5 text-green-400" />
+                      <h3 className="font-semibold text-lg text-gray-800 flex items-center gap-2">
+                        <CheckCircle className="w-5 h-5 text-green-600" />
                         质量检查点
                       </h3>
                       <button
@@ -941,40 +963,40 @@ export default function WorkInstructionModule({ configurationId, componentId }: 
                     </div>
                     <div className="space-y-3">
                       {currentStep.quality_checkpoints.map((checkpoint, checkIndex) => (
-                        <div key={checkIndex} className="flex gap-3 items-start p-3 bg-slate-700 rounded-lg">
+                        <div key={checkIndex} className="flex gap-3 items-start p-3 bg-gray-50 rounded-lg">
                           <div className="flex-1 grid grid-cols-2 gap-3">
                             <input
                               type="text"
                               value={checkpoint.item}
                               onChange={(e) => updateQualityCheckpoint(selectedStepIndex, checkIndex, 'item', e.target.value)}
                               placeholder="检查项目"
-                              className="px-3 py-2 bg-slate-600 border border-slate-500 rounded text-white text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                              className="px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm"
                             />
                             <input
                               type="text"
                               value={checkpoint.standard}
                               onChange={(e) => updateQualityCheckpoint(selectedStepIndex, checkIndex, 'standard', e.target.value)}
                               placeholder="质量标准"
-                              className="px-3 py-2 bg-slate-600 border border-slate-500 rounded text-white text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                              className="px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm"
                             />
                           </div>
                           <button
                             onClick={() => deleteQualityCheckpoint(selectedStepIndex, checkIndex)}
-                            className="p-2 text-red-400 hover:bg-red-900/30 rounded"
+                            className="p-2 text-red-500 hover:bg-red-50 rounded"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
                       ))}
                       {currentStep.quality_checkpoints.length === 0 && (
-                        <div className="text-sm text-slate-400 text-center py-4">暂无质量检查点，点击上方按钮添加</div>
+                        <div className="text-sm text-gray-400 text-center py-4">暂无质量检查点，点击上方按钮添加</div>
                       )}
                     </div>
                   </div>
 
-                  <div className="bg-slate-800 p-6 rounded-xl">
-                    <h3 className="font-semibold text-lg text-white mb-4 flex items-center gap-2">
-                      <AlertCircle className="w-5 h-5 text-red-400" />
+                  <div className="bg-white p-6 rounded-lg border border-gray-200">
+                    <h3 className="font-semibold text-lg text-gray-800 mb-4 flex items-center gap-2">
+                      <AlertCircle className="w-5 h-5 text-red-600" />
                       安全注意事项
                     </h3>
                     <textarea
@@ -982,7 +1004,7 @@ export default function WorkInstructionModule({ configurationId, componentId }: 
                       onChange={(e) => updateStep(selectedStepIndex, 'safety_notes', e.target.value)}
                       rows={4}
                       placeholder="输入安全注意事项..."
-                      className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
                     />
                   </div>
                 </>
@@ -995,16 +1017,19 @@ export default function WorkInstructionModule({ configurationId, componentId }: 
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-6">
-      <div className="max-w-7xl mx-auto">
-        <div className="flex items-center justify-between mb-8">
+    <div className="space-y-6">
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-4xl font-bold text-white mb-2">标准作业指导书 (SOP)</h1>
-            <p className="text-slate-400">管理产线标准操作规范，确保生产一致性与安全性</p>
+            <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+              <FileText className="w-7 h-7 text-blue-600" />
+              标准作业指导书 (SOP)
+            </h2>
+            <p className="text-gray-600 mt-1">管理产线标准操作规范，确保生产一致性与安全性</p>
           </div>
           <button
             onClick={createNewInstruction}
-            className="flex items-center gap-2 px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors shadow-lg"
+            className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
           >
             <Plus className="w-5 h-5" />
             创建新 SOP
@@ -1013,19 +1038,19 @@ export default function WorkInstructionModule({ configurationId, componentId }: 
 
         <div className="mb-6 flex gap-4">
           <div className="flex-1 relative">
-            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
+            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
             <input
               type="text"
-              placeholder="搜索工位或工序代码..."
+              placeholder="搜索作业指导书..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-12 pr-4 py-3 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-400 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              className="w-full pl-12 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           >
             <option value="all">全部状态</option>
             <option value="draft">草稿</option>
@@ -1035,58 +1060,67 @@ export default function WorkInstructionModule({ configurationId, componentId }: 
         </div>
 
         {loading ? (
-          <div className="text-center py-12 text-slate-400">加载中...</div>
+          <div className="text-center py-12 text-gray-500">加载中...</div>
         ) : filteredInstructions.length === 0 ? (
           <div className="text-center py-12">
-            <FileText className="w-16 h-16 text-slate-600 mx-auto mb-4" />
-            <p className="text-slate-400">暂无作业指导书，点击上方按钮创建</p>
+            <FileText className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+            <p className="text-gray-500">暂无作业指导书，点击上方按钮创建</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredInstructions.map((instruction) => (
               <div
                 key={instruction.id}
-                className="bg-slate-800 rounded-xl p-6 border border-slate-700 hover:border-purple-500 transition-all group"
+                className="bg-white rounded-lg p-6 border border-gray-200 hover:border-blue-400 hover:shadow-md transition-all"
               >
                 <div className="flex items-start justify-between mb-4">
-                  <div className="w-12 h-12 bg-purple-600 rounded-lg flex items-center justify-center">
-                    <FileText className="w-6 h-6 text-white" />
+                  <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                    <FileText className="w-6 h-6 text-blue-600" />
                   </div>
                   {getStatusBadge(instruction.status)}
                 </div>
 
-                <h3 className="text-xl font-semibold text-white mb-2 group-hover:text-purple-400 transition-colors">
+                <h3 className="text-lg font-semibold text-gray-900 mb-2 line-clamp-1">
                   {instruction.title}
                 </h3>
-                <p className="text-sm text-slate-400 mb-4 line-clamp-2">
+                <p className="text-sm text-gray-600 mb-4 line-clamp-2 h-10">
                   {instruction.description || '暂无描述'}
                 </p>
 
-                <div className="flex items-center gap-4 text-xs text-slate-500 mb-4">
-                  <span>版本: {instruction.version}</span>
-                  <span>更新于: {formatDate(instruction.updated_at)}</span>
+                <div className="flex items-center gap-4 text-xs text-gray-500 mb-4 pb-4 border-b border-gray-100">
+                  <span>版本 {instruction.version}</span>
+                  <span>•</span>
+                  <span>{formatDate(instruction.updated_at)}</span>
                 </div>
 
-                <div className="flex gap-2">
+                <div className="grid grid-cols-2 gap-2">
                   <button
                     onClick={() => handleViewDetail(instruction)}
-                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors text-sm"
+                    className="flex items-center justify-center gap-1 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm"
                   >
                     <Eye className="w-4 h-4" />
                     查看
                   </button>
                   <button
+                    onClick={() => handleShare(instruction)}
+                    className="flex items-center justify-center gap-1 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm"
+                  >
+                    <Share2 className="w-4 h-4" />
+                    分享
+                  </button>
+                  <button
                     onClick={() => handleEdit(instruction)}
-                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm"
+                    className="flex items-center justify-center gap-1 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
                   >
                     <Edit className="w-4 h-4" />
                     编辑
                   </button>
                   <button
                     onClick={() => handleDelete(instruction.id!)}
-                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                    className="flex items-center justify-center gap-1 px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm"
                   >
                     <Trash2 className="w-4 h-4" />
+                    删除
                   </button>
                 </div>
               </div>
@@ -1094,6 +1128,44 @@ export default function WorkInstructionModule({ configurationId, componentId }: 
           </div>
         )}
       </div>
+
+      {showShareDialog && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setShowShareDialog(false)}>
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">分享作业指导书</h3>
+              <button
+                onClick={() => setShowShareDialog(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                ×
+              </button>
+            </div>
+            <p className="text-sm text-gray-600 mb-4">
+              复制以下链接，即可在手机或其他设备上查看这份作业指导书
+            </p>
+            <div className="flex gap-2 mb-4">
+              <input
+                type="text"
+                value={shareUrl}
+                readOnly
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-sm"
+              />
+              <button
+                onClick={copyShareUrl}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+              >
+                <Copy className="w-4 h-4" />
+                复制
+              </button>
+            </div>
+            <div className="flex items-center gap-2 text-sm text-gray-500">
+              <ExternalLink className="w-4 h-4" />
+              <span>此链接可以在任何设备上访问，无需登录</span>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

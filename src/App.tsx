@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import ProductSelector from './components/ProductSelector';
 import BasicInfoModule from './components/BasicInfoModule';
 import ProcessDevelopmentModule from './components/ProcessDevelopmentModule';
 import TrialProductionModule from './components/TrialProductionModule';
 import EngineeringCostModule from './components/EngineeringCostModule';
 import MassProductionModule from './components/MassProductionModule';
+import ShareWorkInstruction from './components/ShareWorkInstruction';
 import { PackageOpen } from 'lucide-react';
 
 type ModuleType = 'basic' | 'process' | 'trial' | 'cost' | 'mass';
@@ -12,6 +13,17 @@ type ModuleType = 'basic' | 'process' | 'trial' | 'cost' | 'mass';
 export default function App() {
   const [selectedConfiguration, setSelectedConfiguration] = useState<string>('');
   const [activeModule, setActiveModule] = useState<ModuleType>('basic');
+  const [isShareView, setIsShareView] = useState(false);
+  const [shareInstructionId, setShareInstructionId] = useState<string>('');
+
+  useEffect(() => {
+    const path = window.location.pathname;
+    const shareMatch = path.match(/^\/share\/work-instruction\/(.+)$/);
+    if (shareMatch) {
+      setIsShareView(true);
+      setShareInstructionId(shareMatch[1]);
+    }
+  }, []);
 
   const modules = [
     { id: 'basic' as ModuleType, name: '产品基础信息' },
@@ -20,6 +32,10 @@ export default function App() {
     { id: 'cost' as ModuleType, name: '工程造价' },
     { id: 'mass' as ModuleType, name: '量产管理' },
   ];
+
+  if (isShareView && shareInstructionId) {
+    return <ShareWorkInstruction instructionId={shareInstructionId} />;
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
