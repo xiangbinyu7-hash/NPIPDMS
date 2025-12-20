@@ -4,7 +4,6 @@ import {
   Plus, Trash2, Video, AlertCircle, Save, Clock, Wrench, CheckCircle,
   Eye, Edit, FileText, Search, ArrowLeft, Share2, Copy, ExternalLink, Download
 } from 'lucide-react';
-import { exportWorkInstructionToExcel, exportMultipleWorkInstructionsToExcel } from '../lib/excelExport';
 
 interface Process {
   id: string;
@@ -480,13 +479,6 @@ export default function WorkInstructionModule({ configurationId, componentId }: 
               返回列表
             </button>
             <div className="flex gap-2">
-              <button
-                onClick={() => exportWorkInstructionToExcel(selectedInstruction)}
-                className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors"
-              >
-                <Download className="w-4 h-4" />
-                导出
-              </button>
               <button
                 onClick={() => handleShare(selectedInstruction)}
                 className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
@@ -1070,27 +1062,6 @@ export default function WorkInstructionModule({ configurationId, componentId }: 
             <p className="text-gray-600 mt-1">管理产线标准操作规范，确保生产一致性与安全性</p>
           </div>
           <div className="flex gap-3">
-            {filteredInstructions.length > 0 && (
-              <button
-                onClick={async () => {
-                  const instructionsWithSteps = await Promise.all(
-                    filteredInstructions.map(async (instruction) => {
-                      const { data: stepsData } = await supabase
-                        .from('work_instruction_steps')
-                        .select('*')
-                        .eq('instruction_id', instruction.id!)
-                        .order('step_number', { ascending: true });
-                      return { ...instruction, steps: stepsData || [] };
-                    })
-                  );
-                  exportMultipleWorkInstructionsToExcel(instructionsWithSteps);
-                }}
-                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors shadow-sm"
-              >
-                <Download className="w-5 h-5" />
-                批量导出
-              </button>
-            )}
             <button
               onClick={createNewInstruction}
               className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
@@ -1167,7 +1138,7 @@ export default function WorkInstructionModule({ configurationId, componentId }: 
                 </div>
 
                 <div className="space-y-2">
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-4 gap-2">
                     <button
                       onClick={() => handleViewDetail(instruction)}
                       className="flex items-center justify-center gap-1 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm"
@@ -1175,22 +1146,6 @@ export default function WorkInstructionModule({ configurationId, componentId }: 
                       <Eye className="w-4 h-4" />
                       查看
                     </button>
-                    <button
-                      onClick={async () => {
-                        const { data: stepsData } = await supabase
-                          .from('work_instruction_steps')
-                          .select('*')
-                          .eq('instruction_id', instruction.id!)
-                          .order('step_number', { ascending: true });
-                        exportWorkInstructionToExcel({ ...instruction, steps: stepsData || [] });
-                      }}
-                      className="flex items-center justify-center gap-1 px-3 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-sm"
-                    >
-                      <Download className="w-4 h-4" />
-                      导出
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2">
                     <button
                       onClick={() => handleShare(instruction)}
                       className="flex items-center justify-center gap-1 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm"
