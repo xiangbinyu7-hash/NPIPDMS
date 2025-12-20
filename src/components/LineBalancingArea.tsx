@@ -42,6 +42,8 @@ export default function LineBalancingArea({ configurationId, componentId }: Line
   const [flowChartData, setFlowChartData] = useState<{
     totalWorkers: number;
     taktTime: number;
+    targetTaktTime?: number | null;
+    targetStationCount?: number | null;
     flowChartData?: {
       totalSeconds: number;
       balanceRate: number;
@@ -113,6 +115,8 @@ export default function LineBalancingArea({ configurationId, componentId }: Line
       setFlowChartData({
         totalWorkers: data.total_workers,
         taktTime: data.takt_time,
+        targetTaktTime: data.target_takt_time,
+        targetStationCount: data.target_station_count,
         flowChartData: {
           totalSeconds,
           balanceRate: data.flow_chart_data?.balanceRate || 0,
@@ -387,6 +391,8 @@ export default function LineBalancingArea({ configurationId, componentId }: Line
     const flowData = {
       total_workers: finalStations.length,
       takt_time: actualTaktTime,
+      target_takt_time: targetTaktTime,
+      target_station_count: targetStations,
       flow_chart_data: {
         sequences: sortedSequences,
         totalSeconds,
@@ -416,6 +422,8 @@ export default function LineBalancingArea({ configurationId, componentId }: Line
     setFlowChartData({
       totalWorkers: finalStations.length,
       taktTime: actualTaktTime,
+      targetTaktTime: targetTaktTime,
+      targetStationCount: targetStations,
       flowChartData: {
         totalSeconds,
         balanceRate,
@@ -1673,47 +1681,78 @@ export default function LineBalancingArea({ configurationId, componentId }: Line
                   <button
                     onClick={() => {
                       setIsEditingStationCount(true);
-                      setManualStationCount(flowChartData.totalWorkers);
+                      setManualStationCount(flowChartData.targetStationCount || flowChartData.totalWorkers);
                     }}
                     className="text-blue-600 hover:text-blue-800"
-                    title="点击修改"
+                    title="点击修改目标值"
                   >
                     <Edit2 size={16} />
                   </button>
                 )}
               </p>
               {isEditingStationCount ? (
-                <div className="flex items-center gap-2">
-                  <input
-                    type="number"
-                    min="1"
-                    value={manualStationCount || ''}
-                    onChange={(e) => setManualStationCount(parseInt(e.target.value) || null)}
-                    className="w-20 px-2 py-1 border-2 border-blue-500 rounded text-xl font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    autoFocus
-                  />
-                  <span className="text-sm text-gray-600">人</span>
-                  <button
-                    onClick={recalculateWithManualParams}
-                    disabled={loading}
-                    className="p-1 text-white bg-green-600 hover:bg-green-700 rounded disabled:bg-gray-400"
-                    title="应用"
-                  >
-                    <Check size={16} />
-                  </button>
-                  <button
-                    onClick={() => {
-                      setIsEditingStationCount(false);
-                      setManualStationCount(null);
-                    }}
-                    className="p-1 text-gray-600 hover:bg-gray-100 rounded"
-                    title="取消"
-                  >
-                    ✕
-                  </button>
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min="1"
+                      value={manualStationCount === null ? '' : manualStationCount}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === '') {
+                          setManualStationCount(null);
+                        } else {
+                          const num = parseInt(val);
+                          if (!isNaN(num) && num > 0) {
+                            setManualStationCount(num);
+                          }
+                        }
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && manualStationCount && manualStationCount > 0) {
+                          recalculateWithManualParams();
+                        } else if (e.key === 'Escape') {
+                          setIsEditingStationCount(false);
+                          setManualStationCount(null);
+                        }
+                      }}
+                      className="w-20 px-2 py-1 border-2 border-blue-500 rounded text-xl font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="输入"
+                      autoFocus
+                    />
+                    <span className="text-sm text-gray-600">人</span>
+                    <button
+                      onClick={recalculateWithManualParams}
+                      disabled={loading || !manualStationCount || manualStationCount <= 0}
+                      className="p-1 text-white bg-green-600 hover:bg-green-700 rounded disabled:bg-gray-400 disabled:cursor-not-allowed"
+                      title="应用 (Enter)"
+                    >
+                      <Check size={16} />
+                    </button>
+                    <button
+                      onClick={() => {
+                        setIsEditingStationCount(false);
+                        setManualStationCount(null);
+                      }}
+                      className="p-1 text-gray-600 hover:bg-gray-100 rounded"
+                      title="取消 (Esc)"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <p className="text-xs text-gray-500">
+                    当前实际: {flowChartData.totalWorkers || 0}人
+                  </p>
                 </div>
               ) : (
-                <p className="text-3xl font-bold text-blue-600">{flowChartData.totalWorkers || 0} 人</p>
+                <div className="flex flex-col gap-1">
+                  <p className="text-3xl font-bold text-blue-600">{flowChartData.totalWorkers || 0} 人</p>
+                  {flowChartData.targetStationCount && flowChartData.targetStationCount !== flowChartData.totalWorkers && (
+                    <p className="text-xs text-blue-600">
+                      目标: {flowChartData.targetStationCount}人
+                    </p>
+                  )}
+                </div>
               )}
             </div>
             <div className="bg-white rounded-lg p-4 shadow border-2 border-green-200 hover:border-green-400 transition-all">
@@ -1723,48 +1762,79 @@ export default function LineBalancingArea({ configurationId, componentId }: Line
                   <button
                     onClick={() => {
                       setIsEditingTaktTime(true);
-                      setManualTaktTime(flowChartData.taktTime);
+                      setManualTaktTime(flowChartData.targetTaktTime || flowChartData.taktTime);
                     }}
                     className="text-green-600 hover:text-green-800"
-                    title="点击修改"
+                    title="点击修改目标值"
                   >
                     <Edit2 size={16} />
                   </button>
                 )}
               </p>
               {isEditingTaktTime ? (
-                <div className="flex items-center gap-2">
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.1"
-                    value={manualTaktTime || ''}
-                    onChange={(e) => setManualTaktTime(parseFloat(e.target.value) || null)}
-                    className="w-24 px-2 py-1 border-2 border-green-500 rounded text-xl font-bold focus:outline-none focus:ring-2 focus:ring-green-500"
-                    autoFocus
-                  />
-                  <span className="text-sm text-gray-600">秒</span>
-                  <button
-                    onClick={recalculateWithManualParams}
-                    disabled={loading}
-                    className="p-1 text-white bg-green-600 hover:bg-green-700 rounded disabled:bg-gray-400"
-                    title="应用"
-                  >
-                    <Check size={16} />
-                  </button>
-                  <button
-                    onClick={() => {
-                      setIsEditingTaktTime(false);
-                      setManualTaktTime(null);
-                    }}
-                    className="p-1 text-gray-600 hover:bg-gray-100 rounded"
-                    title="取消"
-                  >
-                    ✕
-                  </button>
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min="0.1"
+                      step="0.1"
+                      value={manualTaktTime === null ? '' : manualTaktTime}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === '') {
+                          setManualTaktTime(null);
+                        } else {
+                          const num = parseFloat(val);
+                          if (!isNaN(num) && num > 0) {
+                            setManualTaktTime(num);
+                          }
+                        }
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && manualTaktTime && manualTaktTime > 0) {
+                          recalculateWithManualParams();
+                        } else if (e.key === 'Escape') {
+                          setIsEditingTaktTime(false);
+                          setManualTaktTime(null);
+                        }
+                      }}
+                      className="w-24 px-2 py-1 border-2 border-green-500 rounded text-xl font-bold focus:outline-none focus:ring-2 focus:ring-green-500"
+                      placeholder="输入"
+                      autoFocus
+                    />
+                    <span className="text-sm text-gray-600">秒</span>
+                    <button
+                      onClick={recalculateWithManualParams}
+                      disabled={loading || !manualTaktTime || manualTaktTime <= 0}
+                      className="p-1 text-white bg-green-600 hover:bg-green-700 rounded disabled:bg-gray-400 disabled:cursor-not-allowed"
+                      title="应用 (Enter)"
+                    >
+                      <Check size={16} />
+                    </button>
+                    <button
+                      onClick={() => {
+                        setIsEditingTaktTime(false);
+                        setManualTaktTime(null);
+                      }}
+                      className="p-1 text-gray-600 hover:bg-gray-100 rounded"
+                      title="取消 (Esc)"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <p className="text-xs text-gray-500">
+                    当前实际: {(flowChartData.taktTime || 0).toFixed(2)}秒
+                  </p>
                 </div>
               ) : (
-                <p className="text-3xl font-bold text-green-600">{(flowChartData.taktTime || 0).toFixed(2)} 秒</p>
+                <div className="flex flex-col gap-1">
+                  <p className="text-3xl font-bold text-green-600">{(flowChartData.taktTime || 0).toFixed(2)} 秒</p>
+                  {flowChartData.targetTaktTime && flowChartData.targetTaktTime !== flowChartData.taktTime && (
+                    <p className="text-xs text-blue-600">
+                      目标: {flowChartData.targetTaktTime.toFixed(2)}秒
+                    </p>
+                  )}
+                </div>
               )}
             </div>
             <div className="bg-white rounded-lg p-4 shadow">
