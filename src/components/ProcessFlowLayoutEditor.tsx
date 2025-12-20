@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { Plus, Save, RotateCcw, Trash2, Link2 } from 'lucide-react';
 
 interface FlowNode {
@@ -47,15 +47,11 @@ export default function ProcessFlowLayoutEditor({
   const [editSubtitle, setEditSubtitle] = useState('');
   const [isConnecting, setIsConnecting] = useState(false);
   const [connectFromId, setConnectFromId] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
   const canvasRef = useRef<HTMLDivElement>(null);
+  const hasInitialized = useRef(false);
 
-  useEffect(() => {
-    if (workStations.length > 0) {
-      generateFlowChart();
-    }
-  }, [workStations]);
-
-  const generateFlowChart = () => {
+  const generateFlowChart = useCallback(() => {
     console.log('=== 开始生成Layout图 ===');
     console.log('工位总数:', workStations.length);
 
@@ -224,7 +220,12 @@ export default function ProcessFlowLayoutEditor({
       }
 
       console.log(`  当前组节点:`, currentGroupNodes);
-      previousGroupNodes = currentGroupNodes;
+
+      if (currentGroupNodes.length === 0) {
+        console.error('错误: 当前组没有添加任何节点！');
+      }
+
+      previousGroupNodes = [...currentGroupNodes];
       currentX += processWidth + horizontalSpacing;
     });
 
@@ -251,18 +252,31 @@ export default function ProcessFlowLayoutEditor({
     }
 
     console.log('\n=== Layout图生成完成 ===');
-    console.log('节点总数:', newNodes.length);
+    console.log('节点总数:', newNodes.length, '(预期:', workStations.length + 2, ')');
     console.log('节点列表:', newNodes.map(n => n.id).join(', '));
     console.log('连接总数:', newConnections.length);
     console.log('连接列表:', newConnections.map(c => `${c.from}->${c.to}`).join(', '));
 
+    if (newNodes.length !== workStations.length + 2) {
+      console.error('警告: 节点数量不匹配！应该有', workStations.length + 2, '个节点（含开始和结束），实际有', newNodes.length);
+    }
+
     setNodes(newNodes);
     setConnections(newConnections);
+    setRefreshKey(prev => prev + 1);
 
     setTimeout(() => {
       console.log('状态已更新 - 节点:', nodes.length, '连接:', connections.length);
     }, 100);
-  };
+  }, [workStations]);
+
+  useEffect(() => {
+    if (workStations.length > 0 && !hasInitialized.current) {
+      console.log('首次初始化Layout图');
+      hasInitialized.current = true;
+      generateFlowChart();
+    }
+  }, [workStations, generateFlowChart]);
 
   const handleMouseDown = (e: React.MouseEvent, nodeId: string) => {
     if (editingNodeId || isConnecting) return;
@@ -344,6 +358,12 @@ export default function ProcessFlowLayoutEditor({
     setNodes(nodes.filter(n => n.id !== nodeId));
     setConnections(connections.filter(c => c.from !== nodeId && c.to !== nodeId));
     setSelectedNodeId(null);
+  };
+
+  const handleRegenerateClick = () => {
+    console.log('用户点击重新生成按钮');
+    hasInitialized.current = false;
+    generateFlowChart();
   };
 
   const addProcessNode = () => {
@@ -587,7 +607,7 @@ export default function ProcessFlowLayoutEditor({
             {isConnecting ? '取消连接' : '连接工位'}
           </button>
           <button
-            onClick={generateFlowChart}
+            onClick={handleRegenerateClick}
             className="flex items-center gap-2 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
             disabled={isConnecting}
           >
@@ -634,7 +654,11 @@ export default function ProcessFlowLayoutEditor({
         }}
         onContextMenu={(e) => e.preventDefault()}
       >
-        <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ zIndex: 1, minWidth: '2000px', minHeight: '500px' }}>
+        <svg
+          key={`svg-${refreshKey}`}
+          className="absolute inset-0 w-full h-full pointer-events-none"
+          style={{ zIndex: 1, minWidth: '2000px', minHeight: '500px' }}
+        >
           {connections.map((conn, index) => {
             const fromNode = nodes.find(n => n.id === conn.from);
             const toNode = nodes.find(n => n.id === conn.to);
@@ -710,7 +734,11 @@ export default function ProcessFlowLayoutEditor({
           </defs>
         </svg>
 
-        <div className="relative" style={{ zIndex: 2, minWidth: '2000px', minHeight: '500px' }}>
+        <div
+          key={`nodes-${refreshKey}`}
+          className="relative"
+          style={{ zIndex: 2, minWidth: '2000px', minHeight: '500px' }}
+        >
           {nodes.map(renderNode)}
         </div>
       </div>
