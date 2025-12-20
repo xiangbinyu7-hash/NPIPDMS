@@ -64,6 +64,27 @@ export default function ShareWorkInstruction({ instructionId }: ShareWorkInstruc
     loadInstruction();
   }, [instructionId]);
 
+  useEffect(() => {
+    if (instruction) {
+      document.title = `${instruction.title} - 标准作业指导书`;
+
+      const metaDescription = document.querySelector('meta[name="description"]');
+      if (metaDescription) {
+        metaDescription.setAttribute('content', instruction.description || '标准作业指导书分享');
+      }
+
+      const ogTitle = document.querySelector('meta[property="og:title"]');
+      if (ogTitle) {
+        ogTitle.setAttribute('content', `${instruction.title} - 标准作业指导书`);
+      }
+
+      const ogDescription = document.querySelector('meta[property="og:description"]');
+      if (ogDescription) {
+        ogDescription.setAttribute('content', instruction.description || '标准作业指导书分享 - 无需登录即可查看');
+      }
+    }
+  }, [instruction]);
+
   const loadInstruction = async () => {
     setLoading(true);
     setError(null);
