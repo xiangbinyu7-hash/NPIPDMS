@@ -436,6 +436,38 @@ export default function ProcessFlowLayoutEditor({
     alert('Layout图已保存');
   };
 
+  const calculateCanvasSize = () => {
+    if (nodes.length === 0) {
+      return { width: 2000, height: 500 };
+    }
+
+    let maxX = 0, maxY = 0;
+
+    nodes.forEach(node => {
+      const nodeMaxX = node.x + node.width;
+      const nodeMaxY = node.y + node.height;
+      maxX = Math.max(maxX, nodeMaxX);
+      maxY = Math.max(maxY, nodeMaxY);
+    });
+
+    const padding = 200;
+    const size = {
+      width: Math.max(2000, maxX + padding),
+      height: Math.max(600, maxY + padding)
+    };
+
+    console.log(`📏 Canvas尺寸计算:`, {
+      节点数量: nodes.length,
+      最大X: maxX,
+      最大Y: maxY,
+      Canvas宽度: size.width,
+      Canvas高度: size.height,
+      节点列表: nodes.map(n => `${n.id}(${n.x},${n.y})`)
+    });
+
+    return size;
+  };
+
   const getConnectionPath = (from: FlowNode, to: FlowNode) => {
     const fromX = from.x + from.width;
     const fromY = from.y + from.height / 2;
@@ -673,23 +705,42 @@ export default function ProcessFlowLayoutEditor({
       >
         <svg
           key={`svg-${refreshKey}`}
-          className="absolute inset-0 w-full h-full pointer-events-none"
-          style={{ zIndex: 1, minWidth: '2000px', minHeight: '500px' }}
-          preserveAspectRatio="xMidYMid meet"
+          className="absolute pointer-events-none"
+          style={{
+            zIndex: 1,
+            left: 0,
+            top: 0,
+            width: `${calculateCanvasSize().width}px`,
+            height: `${calculateCanvasSize().height}px`
+          }}
         >
           {connections.map((conn, index) => {
             const fromNode = nodes.find(n => n.id === conn.from);
             const toNode = nodes.find(n => n.id === conn.to);
-            if (!fromNode || !toNode) {
-              console.warn(`❌ 渲染时：连接 ${conn.from} -> ${conn.to} 缺少节点`, {
-                from: fromNode?.id || 'missing',
-                to: toNode?.id || 'missing',
+
+            if (!fromNode) {
+              console.error(`❌ 渲染第${index + 1}条连接失败：找不到起点节点 "${conn.from}"`, {
+                allNodeIds: nodes.map(n => n.id)
+              });
+              return null;
+            }
+
+            if (!toNode) {
+              console.error(`❌ 渲染第${index + 1}条连接失败：找不到终点节点 "${conn.to}"`, {
                 allNodeIds: nodes.map(n => n.id)
               });
               return null;
             }
 
             const path = getConnectionPath(fromNode, toNode);
+
+            if (conn.from.includes('8') || conn.to.includes('9') || conn.to.includes('10') || conn.to === 'end') {
+              console.log(`🔍 渲染连接: ${conn.from} -> ${conn.to}`, {
+                from: { id: fromNode.id, x: fromNode.x, y: fromNode.y, width: fromNode.width, height: fromNode.height },
+                to: { id: toNode.id, x: toNode.x, y: toNode.y, width: toNode.width, height: toNode.height },
+                path: path
+              });
+            }
             const midPoint = {
               x: (fromNode.x + fromNode.width + toNode.x) / 2,
               y: (fromNode.y + fromNode.height / 2 + toNode.y + toNode.height / 2) / 2
@@ -759,7 +810,11 @@ export default function ProcessFlowLayoutEditor({
         <div
           key={`nodes-${refreshKey}`}
           className="relative"
-          style={{ zIndex: 2, minWidth: '2000px', minHeight: '500px' }}
+          style={{
+            zIndex: 2,
+            width: `${calculateCanvasSize().width}px`,
+            height: `${calculateCanvasSize().height}px`
+          }}
         >
           {nodes.map(renderNode)}
         </div>
