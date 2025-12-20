@@ -56,6 +56,9 @@ export default function ProcessFlowLayoutEditor({
   }, [workStations]);
 
   const generateFlowChart = () => {
+    console.log('=== 开始生成Layout图 ===');
+    console.log('工位总数:', workStations.length);
+
     const newNodes: FlowNode[] = [];
     const newConnections: FlowConnection[] = [];
 
@@ -77,24 +80,44 @@ export default function ProcessFlowLayoutEditor({
       height: terminalHeight
     });
 
-    const groupedStations: { [key: string]: typeof workStations } = {};
     const stationGroups: Array<typeof workStations> = [];
+    let i = 0;
 
-    workStations.forEach(station => {
+    while (i < workStations.length) {
+      const station = workStations[i];
       const process = station.processes[0];
-      const workerCount = station.processWorkerCounts?.[process.id] || 1;
+      const processId = process.id || process.process_name;
+      const workerCount = station.processWorkerCounts?.[processId] || 1;
 
       if (workerCount > 1) {
-        const groupKey = `${process.id}-${process.process_name}`;
-        if (!groupedStations[groupKey]) {
-          groupedStations[groupKey] = [];
-          stationGroups.push(groupedStations[groupKey]);
+        const parallelGroup: typeof workStations = [station];
+        let j = i + 1;
+
+        while (j < workStations.length) {
+          const nextStation = workStations[j];
+          const nextProcess = nextStation.processes[0];
+          const nextProcessId = nextProcess.id || nextProcess.process_name;
+          const nextWorkerCount = nextStation.processWorkerCounts?.[nextProcessId] || 1;
+
+          if (nextProcessId === processId && nextWorkerCount === workerCount) {
+            parallelGroup.push(nextStation);
+            j++;
+          } else {
+            break;
+          }
         }
-        groupedStations[groupKey].push(station);
+
+        stationGroups.push(parallelGroup);
+        i = j;
       } else {
-        const singleGroup = [station];
-        stationGroups.push(singleGroup);
+        stationGroups.push([station]);
+        i++;
       }
+    }
+
+    console.log('工位分组结果:', stationGroups.length, '个组');
+    stationGroups.forEach((group, idx) => {
+      console.log(`组${idx + 1}:`, group.map(s => `工位${s.id}`).join(', '));
     });
 
     let currentX = 50 + terminalWidth + horizontalSpacing;
@@ -103,6 +126,7 @@ export default function ProcessFlowLayoutEditor({
     stationGroups.forEach((group, groupIndex) => {
       const isParallel = group.length > 1;
       const currentGroupNodes: string[] = [];
+      console.log(`\n处理组${groupIndex + 1}, 并行: ${isParallel}, 工位数: ${group.length}`);
 
       if (isParallel) {
         const totalHeight = group.length * processHeight + (group.length - 1) * 40;
@@ -111,7 +135,8 @@ export default function ProcessFlowLayoutEditor({
         group.forEach((station, stationIndexInGroup) => {
           const nodeId = `station-${station.id}`;
           const process = station.processes[0];
-          const workerCount = station.processWorkerCounts?.[process.id] || 1;
+          const processId = process.id || process.process_name;
+          const workerCount = station.processWorkerCounts?.[processId] || 1;
 
           let processInfo = station.processes.map(p => {
             if (workerCount > 1) {
@@ -138,9 +163,11 @@ export default function ProcessFlowLayoutEditor({
 
           if (groupIndex === 0) {
             newConnections.push({ from: 'start', to: nodeId });
+            console.log(`  连接: start -> ${nodeId}`);
           } else {
             previousGroupNodes.forEach(prevNodeId => {
               newConnections.push({ from: prevNodeId, to: nodeId });
+              console.log(`  连接: ${prevNodeId} -> ${nodeId}`);
             });
           }
         });
@@ -148,7 +175,8 @@ export default function ProcessFlowLayoutEditor({
         const station = group[0];
         const nodeId = `station-${station.id}`;
         const process = station.processes[0];
-        const workerCount = station.processWorkerCounts?.[process.id] || 1;
+        const processId = process.id || process.process_name;
+        const workerCount = station.processWorkerCounts?.[processId] || 1;
 
         let processInfo = station.processes.map(p => {
           if (workerCount > 1) {
@@ -174,13 +202,17 @@ export default function ProcessFlowLayoutEditor({
 
         if (groupIndex === 0) {
           newConnections.push({ from: 'start', to: nodeId });
+          console.log(`  连接: start -> ${nodeId}`);
         } else {
+          console.log(`  前一组节点:`, previousGroupNodes);
           previousGroupNodes.forEach(prevNodeId => {
             newConnections.push({ from: prevNodeId, to: nodeId });
+            console.log(`  连接: ${prevNodeId} -> ${nodeId}`);
           });
         }
       }
 
+      console.log(`  当前组节点:`, currentGroupNodes);
       previousGroupNodes = currentGroupNodes;
       currentX += processWidth + horizontalSpacing;
     });
@@ -196,11 +228,20 @@ export default function ProcessFlowLayoutEditor({
       height: terminalHeight
     });
 
+    console.log('\n连接到结束节点:');
+    console.log('最后一组节点:', previousGroupNodes);
     if (previousGroupNodes.length > 0) {
       previousGroupNodes.forEach(nodeId => {
         newConnections.push({ from: nodeId, to: endId });
+        console.log(`  连接: ${nodeId} -> end`);
       });
+    } else {
+      console.warn('警告: 没有节点连接到结束节点！');
     }
+
+    console.log('\n=== Layout图生成完成 ===');
+    console.log('节点总数:', newNodes.length);
+    console.log('连接总数:', newConnections.length);
 
     setNodes(newNodes);
     setConnections(newConnections);
