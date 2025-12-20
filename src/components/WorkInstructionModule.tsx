@@ -1116,14 +1116,6 @@ export default function WorkInstructionModule({ configurationId, componentId }: 
                   {getStatusBadge(instruction.status)}
                 </div>
 
-                {instruction.process_name && (
-                  <div className="mb-2">
-                    <span className="inline-flex items-center px-2 py-1 rounded-md bg-blue-50 text-blue-700 text-xs font-medium border border-blue-200">
-                      {instruction.process_name}
-                    </span>
-                  </div>
-                )}
-
                 <h3 className="text-lg font-semibold text-gray-900 mb-2 line-clamp-1">
                   {instruction.title}
                 </h3>
