@@ -3,6 +3,7 @@ import { Settings, Workflow, BarChart3, FileText, Shield, ClipboardCheck, Folder
 import ProcessFlowChartArea from './ProcessFlowChartArea';
 import LineBalancingArea from './LineBalancingArea';
 import ComponentSelector from './ComponentSelector';
+import WorkInstructionModule from './WorkInstructionModule';
 
 interface ProcessDevelopmentModuleProps {
   configurationId: string;
@@ -94,6 +95,14 @@ export default function ProcessDevelopmentModule({ configurationId }: ProcessDev
             />
           )}
 
+          {activeSubArea === 'instruction' && (
+            <ComponentSelector
+              configurationId={configurationId}
+              selectedComponentId={selectedComponentId}
+              onSelectComponent={setSelectedComponentId}
+            />
+          )}
+
           <div className="min-h-[400px]">
             {activeSubArea === 'flow' && (
               <ProcessFlowChartArea
@@ -108,9 +117,10 @@ export default function ProcessDevelopmentModule({ configurationId }: ProcessDev
               />
             )}
             {activeSubArea === 'instruction' && (
-              <div className="text-center py-12 text-gray-500">
-                标准作业指导书功能开发中...
-              </div>
+              <WorkInstructionModule
+                configurationId={configurationId}
+                componentId={selectedComponentId || undefined}
+              />
             )}
             {activeSubArea === 'pfmea' && (
               <div className="text-center py-12 text-gray-500">
