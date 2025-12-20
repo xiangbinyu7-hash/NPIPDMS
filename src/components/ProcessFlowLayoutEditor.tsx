@@ -50,7 +50,7 @@ export default function ProcessFlowLayoutEditor({
   const canvasRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (workStations.length > 0 && nodes.length === 0) {
+    if (workStations.length > 0) {
       generateFlowChart();
     }
   }, [workStations]);
@@ -58,6 +58,17 @@ export default function ProcessFlowLayoutEditor({
   const generateFlowChart = () => {
     console.log('=== 开始生成Layout图 ===');
     console.log('工位总数:', workStations.length);
+
+    if (workStations.length === 0) {
+      console.log('没有工位数据，清空Layout图');
+      setNodes([]);
+      setConnections([]);
+      return;
+    }
+
+    setSelectedNodeId(null);
+    setIsConnecting(false);
+    setConnectFromId(null);
 
     const newNodes: FlowNode[] = [];
     const newConnections: FlowConnection[] = [];
@@ -241,10 +252,16 @@ export default function ProcessFlowLayoutEditor({
 
     console.log('\n=== Layout图生成完成 ===');
     console.log('节点总数:', newNodes.length);
+    console.log('节点列表:', newNodes.map(n => n.id).join(', '));
     console.log('连接总数:', newConnections.length);
+    console.log('连接列表:', newConnections.map(c => `${c.from}->${c.to}`).join(', '));
 
     setNodes(newNodes);
     setConnections(newConnections);
+
+    setTimeout(() => {
+      console.log('状态已更新 - 节点:', nodes.length, '连接:', connections.length);
+    }, 100);
   };
 
   const handleMouseDown = (e: React.MouseEvent, nodeId: string) => {
@@ -536,7 +553,12 @@ export default function ProcessFlowLayoutEditor({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h4 className="font-semibold text-gray-800">Layout图</h4>
+        <h4 className="font-semibold text-gray-800">
+          Layout图
+          <span className="ml-3 text-xs text-gray-500 font-normal">
+            ({nodes.length} 个节点, {connections.length} 条连接)
+          </span>
+        </h4>
         <div className="flex gap-2">
           <button
             onClick={addProcessNode}
@@ -612,11 +634,14 @@ export default function ProcessFlowLayoutEditor({
         }}
         onContextMenu={(e) => e.preventDefault()}
       >
-        <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ zIndex: 1 }}>
+        <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ zIndex: 1, minWidth: '2000px', minHeight: '500px' }}>
           {connections.map((conn, index) => {
             const fromNode = nodes.find(n => n.id === conn.from);
             const toNode = nodes.find(n => n.id === conn.to);
-            if (!fromNode || !toNode) return null;
+            if (!fromNode || !toNode) {
+              console.warn(`连接 ${conn.from} -> ${conn.to} 缺少节点`, { fromNode, toNode });
+              return null;
+            }
 
             const path = getConnectionPath(fromNode, toNode);
             const midPoint = {
