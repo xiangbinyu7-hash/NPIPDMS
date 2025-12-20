@@ -318,15 +318,42 @@ export default function LineBalancingArea({ configurationId, componentId }: Line
     console.log('手动参数:', { targetStations, targetTaktTime });
     console.log('约束条件:', { taktTimeConstraint });
 
-    const finalStations = distributeProcessesToStations(
+    let finalStations = distributeProcessesToStations(
       sortedSequences,
       maxProcess,
       taktTimeConstraint,
       targetStations
     );
 
+    if (finalStations.length === 0 && targetStations) {
+      console.log('尝试放宽节拍时间约束...');
+      const averageTimePerStation = totalSeconds / targetStations;
+      const relaxedTaktTime = Math.max(averageTimePerStation * 1.2, maxProcess.work_seconds);
+
+      console.log(`放宽节拍时间至: ${relaxedTaktTime.toFixed(2)}秒`);
+
+      finalStations = distributeProcessesToStations(
+        sortedSequences,
+        maxProcess,
+        relaxedTaktTime,
+        targetStations
+      );
+
+      if (finalStations.length === 0) {
+        const evenMoreRelaxedTaktTime = averageTimePerStation * 1.5;
+        console.log(`进一步放宽节拍时间至: ${evenMoreRelaxedTaktTime.toFixed(2)}秒`);
+
+        finalStations = distributeProcessesToStations(
+          sortedSequences,
+          maxProcess,
+          evenMoreRelaxedTaktTime,
+          targetStations
+        );
+      }
+    }
+
     if (finalStations.length === 0) {
-      alert('无法在给定约束下生成有效方案，请调整参数');
+      alert('无法在给定约束下生成有效方案，请调整参数。建议：\n1. 增加工位数\n2. 或点击"生成流程图"使用自动优化');
       return;
     }
 
@@ -379,6 +406,10 @@ export default function LineBalancingArea({ configurationId, componentId }: Line
         maxStationSeconds
       }
     });
+
+    if (targetStations && actualTaktTime > taktTimeConstraint * 1.05) {
+      alert(`重新计算完成！\n\n由于工位数限制，实际节拍时间为 ${actualTaktTime.toFixed(2)} 秒\n平衡率: ${balanceRate.toFixed(1)}%`);
+    }
   };
 
   const distributeProcessesToStations = (
@@ -405,56 +436,164 @@ export default function LineBalancingArea({ configurationId, componentId }: Line
     if (targetCount < 1) return [];
 
     const otherProcesses = processes.filter(p => p.id !== bottleneckProcess.id);
-    const stations: WorkStation[] = [];
+    const n = otherProcesses.length;
 
-    for (let i = 0; i < targetCount; i++) {
-      stations.push({ id: i + 1, processes: [], totalSeconds: 0 });
+    if (n === 0) {
+      if (targetCount === 1) {
+        return [{
+          id: 1,
+          processes: [bottleneckProcess],
+          totalSeconds: bottleneckProcess.work_seconds
+        }];
+      }
+      return [];
     }
 
-    let bottleneckInserted = false;
-    let currentStationIndex = 0;
+    let allSolutions: { stations: WorkStation[], variance: number, balanceRate: number }[] = [];
 
-    for (const process of processes) {
-      if (process.id === bottleneckProcess.id) {
-        const emptyStationIndex = stations.findIndex(s => s.processes.length === 0);
-        if (emptyStationIndex !== -1) {
-          stations[emptyStationIndex].processes.push(process);
-          stations[emptyStationIndex].totalSeconds = process.work_seconds;
-          bottleneckInserted = true;
-          currentStationIndex = emptyStationIndex + 1;
-        } else {
-          if (currentStationIndex >= stations.length) currentStationIndex = 0;
-          const station = stations[currentStationIndex];
-          if (station.totalSeconds + process.work_seconds <= taktTime) {
-            station.processes.push(process);
-            station.totalSeconds += process.work_seconds;
-          } else {
-            return [];
+    function validateLevelOrder(stations: WorkStation[]): boolean {
+      for (let i = 0; i < stations.length - 1; i++) {
+        if (stations[i].processes.length === 0 || stations[i + 1].processes.length === 0) continue;
+        const currentMaxLevel = Math.max(...stations[i].processes.map(p => p.sequence_level));
+        const nextMinLevel = Math.min(...stations[i + 1].processes.map(p => p.sequence_level));
+        if (currentMaxLevel > nextMinLevel) {
+          return false;
+        }
+      }
+      return true;
+    }
+
+    function enumerate(index: number, currentStations: WorkStation[]) {
+      if (index === n) {
+        const allValid = currentStations.every(s => s.totalSeconds <= taktTime);
+        if (!allValid) return;
+
+        if (!validateLevelOrder(currentStations)) {
+          return;
+        }
+
+        let insertPosition = 0;
+        for (let i = 0; i < currentStations.length; i++) {
+          if (currentStations[i].processes.length === 0) continue;
+          const maxLevel = Math.max(...currentStations[i].processes.map(p => p.sequence_level));
+          const maxOrder = Math.max(...currentStations[i].processes
+            .filter(p => p.sequence_level === maxLevel)
+            .map(p => p.order_index));
+
+          if (maxLevel < bottleneckProcess.sequence_level ||
+              (maxLevel === bottleneckProcess.sequence_level && maxOrder < bottleneckProcess.order_index)) {
+            insertPosition = i + 1;
           }
         }
-        continue;
-      }
 
-      let placed = false;
-      for (let attempt = 0; attempt < stations.length; attempt++) {
-        const stationIdx = (currentStationIndex + attempt) % stations.length;
-        const station = stations[stationIdx];
-
-        if (station.totalSeconds + process.work_seconds <= taktTime) {
-          station.processes.push(process);
-          station.totalSeconds += process.work_seconds;
-          placed = true;
-          currentStationIndex = stationIdx;
-          break;
+        const fullStations: WorkStation[] = [];
+        for (let i = 0; i < currentStations.length; i++) {
+          if (i === insertPosition) {
+            fullStations.push({
+              id: fullStations.length + 1,
+              processes: [bottleneckProcess],
+              totalSeconds: bottleneckProcess.work_seconds
+            });
+          }
+          if (currentStations[i].processes.length > 0) {
+            fullStations.push({
+              id: fullStations.length + 1,
+              processes: [...currentStations[i].processes],
+              totalSeconds: currentStations[i].totalSeconds
+            });
+          }
         }
+        if (insertPosition >= currentStations.length) {
+          fullStations.push({
+            id: fullStations.length + 1,
+            processes: [bottleneckProcess],
+            totalSeconds: bottleneckProcess.work_seconds
+          });
+        }
+
+        if (fullStations.length !== targetCount) {
+          return;
+        }
+
+        if (!validateLevelOrder(fullStations)) {
+          return;
+        }
+
+        const totalSeconds = processes.reduce((sum, p) => sum + p.work_seconds, 0);
+        const workloads = fullStations.map(s => s.totalSeconds);
+        const variance = workloads.reduce((sum, w, _, arr) => {
+          const mean = arr.reduce((s, v) => s + v, 0) / arr.length;
+          return sum + Math.pow(w - mean, 2);
+        }, 0) / workloads.length;
+        const maxWorkload = Math.max(...workloads);
+        const balanceRate = (totalSeconds / (targetCount * maxWorkload)) * 100;
+
+        allSolutions.push({
+          stations: fullStations,
+          variance: variance,
+          balanceRate: balanceRate
+        });
+
+        return;
       }
 
-      if (!placed) {
-        return [];
+      const currentProcess = otherProcesses[index];
+      const currentProcessSeconds = currentProcess.work_seconds;
+      const currentLevel = currentProcess.sequence_level;
+
+      for (let i = 0; i < currentStations.length; i++) {
+        const station = currentStations[i];
+        const newTotal = station.totalSeconds + currentProcessSeconds;
+
+        if (newTotal <= taktTime) {
+          let canAdd = true;
+          if (station.processes.length > 0) {
+            const stationMaxLevel = Math.max(...station.processes.map(p => p.sequence_level));
+            if (currentLevel < stationMaxLevel) {
+              canAdd = false;
+            }
+          }
+
+          if (i < currentStations.length - 1 && currentStations[i + 1].processes.length > 0) {
+            const nextMinLevel = Math.min(...currentStations[i + 1].processes.map(p => p.sequence_level));
+            if (currentLevel > nextMinLevel) {
+              canAdd = false;
+            }
+          }
+
+          if (canAdd) {
+            station.processes.push(currentProcess);
+            station.totalSeconds += currentProcess.work_seconds;
+            enumerate(index + 1, currentStations);
+            station.processes.pop();
+            station.totalSeconds -= currentProcess.work_seconds;
+          }
+        }
       }
     }
 
-    return stations;
+    const initialStations: WorkStation[] = [];
+    for (let i = 0; i < targetCount; i++) {
+      initialStations.push({ id: i + 1, processes: [], totalSeconds: 0 });
+    }
+
+    enumerate(0, initialStations);
+
+    if (allSolutions.length === 0) {
+      console.log('未找到满足条件的方案');
+      return [];
+    }
+
+    allSolutions.sort((a, b) => {
+      const balanceDiff = b.balanceRate - a.balanceRate;
+      if (Math.abs(balanceDiff) > 0.1) {
+        return balanceDiff;
+      }
+      return a.variance - b.variance;
+    });
+
+    console.log(`找到 ${allSolutions.length} 个方案，最优平衡率: ${allSolutions[0].balanceRate.toFixed(2)}%`);
+    return allSolutions[0].stations;
   };
 
   const findOptimalStationsWithTakt = (
